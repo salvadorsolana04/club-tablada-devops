@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Club La Tablada
 
 > **Materia:** Ingeniería del Software 3 — UCC 2026
