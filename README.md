@@ -132,16 +132,12 @@ frontend/
     components/ # Navbar, ProtectedRoute
 ```
 
-
 ## 🛠️ Estado del Pipeline — TP1: Git para Equipos y Cultura DevOps
 
 En este trabajo práctico se configuró la infraestructura base de control de versiones y políticas de integración continua para el equipo de desarrollo.
 
 ### Requisitos Implementados & Cumplimiento:
-<<<<<<< HEAD
 
-=======
->>>>>>> main
 1. **Política de Protección de Rama (`Policy as Code`):**
    - Se configuró la rama `main` en GitHub requiriendo Pull Request obligatorio antes de integrar cualquier cambio.
    - Configuración de **0 aprobaciones (*approvals*)** requeridas (adaptado para trabajo individual) y activación innegociable de `enforce_admins` (se rechaza el push directo incluso al administrador del repo).
@@ -153,24 +149,12 @@ En este trabajo práctico se configuró la infraestructura base de control de ve
 4. **Versionado Semántico & Release:**
    - Creación y publicación del tag anotado **`v1.0.0`** y Release asociada con notas de cambios.
 
-<<<<<<< HEAD
 ### 📂 Estructura de Documentación del TP1
-=======
----
-
-## 📂 Estructura de Documentación del TP1
->>>>>>> main
 
 - **[`decisiones.md`](./decisiones.md):** Contiene la justificación técnica de por qué Git no pudo resolver el conflicto de forma automática, la estrategia de branching seleccionada, los problemas solucionados y la declaración explícita de uso de IA.
 - **[`evidencias.md`](./evidencias.md):** Muestra las capturas de pantalla de los 4 momentos clave (Push directo rechazado, Aviso de conflicto en GitHub, Marcadores de conflicto `<<<<<<<` y Release publicada).
 
-<<<<<<< HEAD
 ### 🎓 Guía Rápida para la Defensa Oral (P1 - Clase 5)
-=======
----
-
-## 🎓 Guía Rápida para la Defensa Oral (P1 - Clase 5)
->>>>>>> main
 
 | Pregunta de la Cátedra | Concepto / Respuesta Clave |
 | :--- | :--- |
@@ -179,7 +163,6 @@ En este trabajo práctico se configuró la infraestructura base de control de ve
 | **¿Qué es una rama en Git?** | No es una copia completa del proyecto, sino un puntero móvil ligero a un commit específico dentro del grafo del repositorio. Por eso crear ramas es instantáneo y barato. |
 | **¿Por qué usaron Squash y Merge?** | Reemplaza todos los commits intermedios de una rama de feature por uno solo al integrar a `main`. Mantiene la rama principal limpia: `1 commit = 1 funcionalidad unificada`. |
 | **¿Qué mide la versión `v1.0.0`?** | Aplica Versionado Semántico (`MAJOR.MINOR.PATCH`). Indica el primer hito estable y funcional del repositorio (*Baseline*). |
-<<<<<<< HEAD
 
 ## Subir tus cambios a GitHub (git push)
 
@@ -208,5 +191,3 @@ Notas:
 - `git status` te muestra en gris/rojo los archivos modificados o nuevos. Los archivos como `backend/.env`, `backend/db.sqlite3`, `backend/media/`, `backend/.venv/` y `frontend/node_modules/` **no van a aparecer** — están en `.gitignore` a propósito, no se suben.
 - Si `git push` rechaza el push porque el remoto tiene commits que vos no tenés localmente, corré primero `git pull origin main` y resolvé conflictos si aparecen, y recién ahí repetí el `git push`.
 - Si es tu primera vez configurando git en esta máquina, puede pedirte usuario/contraseña o un token de acceso personal de GitHub (no la contraseña de tu cuenta) — GitHub ya no acepta contraseña común para `git push` por HTTPS.
-=======
->>>>>>> main
