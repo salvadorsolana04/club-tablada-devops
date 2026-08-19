@@ -13,10 +13,22 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 
-# Editor / OS
-.DS_Store
-.vscode/
-.idea/
-
 # Claude Code local settings
 .claude/settings.local.json
+
+# dependencias y artefactos de build
+node_modules/
+bin/
+obj/
+dist/
+build/
+
+# secretos: NUNCA se versionan
+.env
+*.local
+
+# basura del sistema operativo y del editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
