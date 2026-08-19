@@ -10,4 +10,9 @@ Se adoptó la estrategia **GitHub Flow** utilizando la opción de **Squash and M
 - **Rechazo por desactualización local:** Al intentar realizar el primer push, se produjo un rechazo previo debido a que el repositorio remoto contenía archivos iniciales (`.gitignore`) no presentes localmente. Se resolvió sincronizando mediante `git pull origin main --rebase`.
 
 ## 4. Declaración de Uso de IA
-Se utilizó asistencia de IA como copiloto para acelerar la comprensión del flujo de trabajo, la sintaxis de comandos de Git en terminal macOS y el guiado en la resolución de conflictos. El estudiante comprende y es capaz de defender de forma oral cada decisión técnica y configuración aplicada en el repositorio.
+Se utilizó **Claude Code** (Anthropic) como asistente de IA en dos frentes:
+
+- **Desarrollo de la aplicación**: se usó Claude Code para generar y modificar código del backend (Django) y frontend (React) del proyecto Club La Tablada, incluyendo la reimplementación de la app y ajustes posteriores.
+- **Proceso de resolución del TP1**: se usó Claude Code como copiloto para acelerar la comprensión del flujo de trabajo de Git/GitHub, la sintaxis de comandos en terminal macOS, el guiado en la creación y protección de ramas, y la resolución del conflicto de merge provocado a propósito.
+
+En ambos casos, el código y los comandos generados fueron revisados y ejecutados por el estudiante, verificando su funcionamiento antes de commitear (corriendo la app localmente y comprobando el resultado de cada comando de Git contra lo esperado). El estudiante comprende y es capaz de defender de forma oral cada decisión técnica y configuración aplicada en el repositorio.
