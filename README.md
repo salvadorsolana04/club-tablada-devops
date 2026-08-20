@@ -3,7 +3,7 @@
 > **Materia:** Ingeniería del Software 3 — UCC 2026
 > **Alumno:** Salvador Solana Allende
 > **Instructor:** Ing. Ariel Schwindt
-> **Versión Actual:** `v1.0.0` (TP1 Completo)
+> **Versión Actual:** `v1.0.0` (TP1 Completo) — TP2 (Contenedores) resuelto sobre esta misma base
 
 App web del Club La Tablada — proyecto de Ingeniería de Software 3 / DevOps.
 
@@ -15,10 +15,81 @@ Arquitectura liviana ("Vertical Slice") con 3 módulos:
 
 ## Stack
 
-- **Backend:** Python 3.13, Django 6, Django REST Framework, SimpleJWT, django-environ.
+- **Backend:** Python 3.13, Django 6, Django REST Framework, SimpleJWT, django-environ, gunicorn + whitenoise (en contenedor).
 - **Frontend:** React 19 + Vite, Axios, React Router DOM, TailwindCSS.
+- **Base de datos:** SQLite (local, sin Docker) o PostgreSQL 16 (contenedor, ver abajo).
+- **Contenedores:** Docker multi-stage para backend y frontend, orquestados con Docker Compose; imágenes publicadas en GitHub Container Registry.
 
-## Puesta en marcha local
+## Levantar con Docker (recomendado)
+
+Requisito único: **Docker Desktop** instalado y corriendo (`docker compose version` tiene que responder — si dice `Cannot connect to the Docker daemon`, abrí Docker Desktop y esperá a que arranque). No hace falta instalar Python, Node ni Postgres en tu máquina: todo corre en contenedores.
+
+### Primera vez (o después de clonar el repo)
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+`cp .env.example .env` copia la plantilla de variables de entorno — el `.env` real no se versiona (tiene la contraseña de la base). **Este paso va primero**: sin él, Postgres arranca sin contraseña y se niega a levantar.
+
+El primer `up --build` construye las tres imágenes (backend, frontend, y descarga Postgres) y puede tardar un par de minutos. Al arrancar, el backend **aplica las migraciones de Django automáticamente** — no hace falta correr `migrate` a mano, es parte del arranque del contenedor.
+
+Esperá a que los tres servicios estén arriba:
+
+```bash
+docker compose ps      # db "healthy", backend y frontend "running"
+```
+
+Con todo arriba:
+
+- **Frontend** (React, servido por nginx): http://localhost:3000
+- **API** (Django, vía gunicorn): http://localhost:8000/api/v1/
+- **Admin de Django**: http://localhost:8000/admin/ (también accesible en `http://localhost:3000/admin/`, vía el proxy de nginx)
+
+### Usuarios para probar
+
+La base arranca vacía. Para crear los mismos usuarios de prueba que en la puesta en marcha sin Docker, ejecutá el comando dentro del contenedor del backend:
+
+```bash
+docker compose exec backend python manage.py shell -c "
+from core.models import Usuario
+Usuario.objects.create_user(username='admin_demo', password='ClubTablada2026!', rol='admin')
+Usuario.objects.create_user(username='entrenador_demo', password='ClubTablada2026!', rol='entrenador', deporte='rugby', division='M19')
+Usuario.objects.create_user(username='jugador_demo', password='ClubTablada2026!', rol='jugador', deporte='rugby', division='M19')
+"
+```
+
+O creá un superusuario para entrar a `/admin/`:
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+### Día a día
+
+```bash
+docker compose up -d              # levanta lo que ya está construido
+docker compose logs -f backend    # ver logs del backend en vivo (Ctrl+C para salir)
+docker compose down               # apaga los contenedores, CONSERVA los datos de la BD
+docker compose down -v            # apaga todo y BORRA también los datos de la BD
+```
+
+La diferencia entre esos dos últimos comandos importa: los datos de Postgres viven en un volumen nombrado (`db_data`) que sobrevive a `down`, pero no a `down -v`.
+
+### Levantar el sistema sin el código (imágenes publicadas)
+
+Las imágenes de backend y frontend están publicadas y son públicas en GitHub Container Registry. Para levantar el sistema **descargándolas** en vez de compilarlas desde este repo:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.registry.yml up -d
+```
+
+- `ghcr.io/salvadorsolana04/club-tablada-backend:v0.1.1`
+- `ghcr.io/salvadorsolana04/club-tablada-frontend:v0.1.1`
+
+## Puesta en marcha sin Docker (alternativa)
 
 Requisitos: **Python 3.13+**, **Node 20+** y **npm**. No hace falta Docker ni ninguna base de datos externa — por defecto todo corre contra SQLite.
 
@@ -122,15 +193,55 @@ npm run preview     # sirve ese build para verificarlo local
 
 ```
 backend/
-  config/       # settings, urls raíz
-  core/         # modelos, serializers, views, permisos, tests
+  config/           # settings, urls raíz
+  core/             # modelos, serializers, views, permisos, tests
+  Dockerfile        # multi-stage: build (venv) + final (runtime)
+  entrypoint.sh      # migrate automático + arranque de gunicorn
+  .dockerignore
 frontend/
   src/
-    api/        # cliente axios con interceptor JWT
-    context/    # AuthContext (sesión)
-    pages/      # Login, Feed, Division
-    components/ # Navbar, ProtectedRoute
+    api/            # cliente axios con interceptor JWT
+    context/        # AuthContext (sesión)
+    pages/          # Login, Feed, Division
+    components/     # Navbar, ProtectedRoute
+  Dockerfile        # multi-stage: build (Node) + final (nginx)
+  nginx.conf        # proxy /api, /admin, /media hacia el backend
+  .dockerignore
+docker-compose.yml            # sistema completo, construyendo desde el código
+docker-compose.registry.yml   # igual, pero descargando las imágenes publicadas
+.env.example                  # plantilla de variables (el .env real no se versiona)
 ```
+
+## 🐳 Estado del Pipeline — TP2: Contenedores
+
+### Requisitos Implementados & Cumplimiento
+
+1. **Dockerfiles multi-stage:**
+   - Backend: etapa `build` (instala dependencias en un venv) + etapa `final` (solo runtime, sin herramientas de compilación).
+   - Frontend: etapa `build` (Node, compila la SPA) + etapa `final` (nginx sirviendo los estáticos — el toolchain de Node no viaja a producción).
+2. **Orquestación con Compose:**
+   - Volumen nombrado (`db_data`) para persistencia de Postgres.
+   - `depends_on` con `condition: service_healthy` — el backend espera a que la base esté lista, no solo iniciada.
+   - Secretos vía `.env` no versionado, con `.env.example` commiteado.
+3. **Reproducibilidad:** `docker compose up -d` levanta el sistema completo end-to-end con un solo comando — las migraciones de Django se aplican automáticamente al arrancar (`entrypoint.sh`), no requieren un paso manual.
+4. **Publicación:** imágenes de backend y frontend publicadas en `ghcr.io`, con tag semver (`v0.1.1`) y visibilidad pública, verificadas con `docker pull` sin sesión iniciada.
+
+### 📂 Estructura de Documentación del TP2
+
+- **[`decisiones.md`](./decisiones.md):** justificación de las imágenes base elegidas, la estructura multi-stage, qué persiste y qué no, y los problemas reales encontrados durante la contenerización (incluida una filtración de secretos que se detectó y corrigió).
+- **[`evidencias.md`](./evidencias.md):** salidas de `docker compose up -d --build` desde cero, la prueba de persistencia (`down` conserva datos, `down -v` los borra), comparación de tamaño de imágenes, y las imágenes publicadas en el registry.
+
+### 🎓 Guía Rápida para la Defensa Oral
+
+| Pregunta de la Cátedra | Concepto / Respuesta Clave |
+| :--- | :--- |
+| **¿Diferencia entre imagen y contenedor?** | La imagen es el paquete inmutable (capas de solo lectura); el contenedor es una instancia en ejecución de esa imagen, con su propia capa de escritura efímera. |
+| **¿`CMD` vs `ENTRYPOINT`?** | `ENTRYPOINT` define el ejecutable fijo del contenedor; acá es `["./entrypoint.sh"]`, que corre `migrate` y después `exec gunicorn ...` — reemplaza el proceso para que gunicorn reciba las señales de Docker directamente. |
+| **¿Por qué multi-stage?** | Separa lo necesario para *compilar/instalar* de lo necesario para *ejecutar*. En el frontend el ahorro es grande (Node completo vs. solo nginx + estáticos); en el backend el ahorro de tamaño es chico (Python no tiene un "SDK" tan pesado como .NET), pero igual aísla el paso de instalación para mejor cacheo. |
+| **¿Qué pasa con los datos si borro el contenedor de la BD?** | Nada — persisten en el volumen nombrado `db_data`, que Docker administra aparte del contenedor. Solo `docker compose down -v` borra también el volumen. |
+| **¿Cómo se encuentra el backend con la BD?** | Por nombre de servicio: `Host=db` en la connection string. Compose crea una red interna con DNS embebido donde cada servicio es alcanzable por su nombre. |
+| **¿Por qué `depends_on` solo no alcanza?** | Solo garantiza el orden de *arranque* del contenedor, no que el proceso adentro ya acepte conexiones. El `healthcheck` (`pg_isready`) + `condition: service_healthy` esperan a que Postgres esté realmente listo. |
+| **¿Por qué el `.env` no está en el repo?** | Porque tiene la contraseña real de la base. Se commitea solo `.env.example` (sin valores reales) y cada quien crea su propio `.env` local con `cp`. |
 
 ## 🛠️ Estado del Pipeline — TP1: Git para Equipos y Cultura DevOps
 
