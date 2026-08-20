@@ -212,42 +212,17 @@ docker-compose.registry.yml   # igual, pero descargando las imágenes publicadas
 .env.example                  # plantilla de variables (el .env real no se versiona)
 ```
 
-## 🐳 Estado del Pipeline — TP2: Contenedores
+---
 
-### Requisitos Implementados & Cumplimiento
+## Trabajos Prácticos
 
-1. **Dockerfiles multi-stage:**
-   - Backend: etapa `build` (instala dependencias en un venv) + etapa `final` (solo runtime, sin herramientas de compilación).
-   - Frontend: etapa `build` (Node, compila la SPA) + etapa `final` (nginx sirviendo los estáticos — el toolchain de Node no viaja a producción).
-2. **Orquestación con Compose:**
-   - Volumen nombrado (`db_data`) para persistencia de Postgres.
-   - `depends_on` con `condition: service_healthy` — el backend espera a que la base esté lista, no solo iniciada.
-   - Secretos vía `.env` no versionado, con `.env.example` commiteado.
-3. **Reproducibilidad:** `docker compose up -d` levanta el sistema completo end-to-end con un solo comando — las migraciones de Django se aplican automáticamente al arrancar (`entrypoint.sh`), no requieren un paso manual.
-4. **Publicación:** imágenes de backend y frontend publicadas en `ghcr.io`, con tag semver (`v0.1.1`) y visibilidad pública, verificadas con `docker pull` sin sesión iniciada.
+Todo lo de arriba es la documentación de la app en sí. Lo que sigue es el resumen de qué se hizo en cada Trabajo Práctico de la materia, en orden cronológico — para eso están `decisiones.md` y `evidencias.md`, que se van completando TP por TP en el mismo archivo (no uno nuevo por TP).
 
-### 📂 Estructura de Documentación del TP2
-
-- **[`decisiones.md`](./decisiones.md):** justificación de las imágenes base elegidas, la estructura multi-stage, qué persiste y qué no, y los problemas reales encontrados durante la contenerización (incluida una filtración de secretos que se detectó y corrigió).
-- **[`evidencias.md`](./evidencias.md):** salidas de `docker compose up -d --build` desde cero, la prueba de persistencia (`down` conserva datos, `down -v` los borra), comparación de tamaño de imágenes, y las imágenes publicadas en el registry.
-
-### 🎓 Guía Rápida para la Defensa Oral
-
-| Pregunta de la Cátedra | Concepto / Respuesta Clave |
-| :--- | :--- |
-| **¿Diferencia entre imagen y contenedor?** | La imagen es el paquete inmutable (capas de solo lectura); el contenedor es una instancia en ejecución de esa imagen, con su propia capa de escritura efímera. |
-| **¿`CMD` vs `ENTRYPOINT`?** | `ENTRYPOINT` define el ejecutable fijo del contenedor; acá es `["./entrypoint.sh"]`, que corre `migrate` y después `exec gunicorn ...` — reemplaza el proceso para que gunicorn reciba las señales de Docker directamente. |
-| **¿Por qué multi-stage?** | Separa lo necesario para *compilar/instalar* de lo necesario para *ejecutar*. En el frontend el ahorro es grande (Node completo vs. solo nginx + estáticos); en el backend el ahorro de tamaño es chico (Python no tiene un "SDK" tan pesado como .NET), pero igual aísla el paso de instalación para mejor cacheo. |
-| **¿Qué pasa con los datos si borro el contenedor de la BD?** | Nada — persisten en el volumen nombrado `db_data`, que Docker administra aparte del contenedor. Solo `docker compose down -v` borra también el volumen. |
-| **¿Cómo se encuentra el backend con la BD?** | Por nombre de servicio: `Host=db` en la connection string. Compose crea una red interna con DNS embebido donde cada servicio es alcanzable por su nombre. |
-| **¿Por qué `depends_on` solo no alcanza?** | Solo garantiza el orden de *arranque* del contenedor, no que el proceso adentro ya acepte conexiones. El `healthcheck` (`pg_isready`) + `condition: service_healthy` esperan a que Postgres esté realmente listo. |
-| **¿Por qué el `.env` no está en el repo?** | Porque tiene la contraseña real de la base. Se commitea solo `.env.example` (sin valores reales) y cada quien crea su propio `.env` local con `cp`. |
-
-## 🛠️ Estado del Pipeline — TP1: Git para Equipos y Cultura DevOps
+### TP1 — Git para Equipos y Cultura DevOps
 
 En este trabajo práctico se configuró la infraestructura base de control de versiones y políticas de integración continua para el equipo de desarrollo.
 
-### Requisitos Implementados & Cumplimiento:
+#### Requisitos Implementados & Cumplimiento
 
 1. **Política de Protección de Rama (`Policy as Code`):**
    - Se configuró la rama `main` en GitHub requiriendo Pull Request obligatorio antes de integrar cualquier cambio.
@@ -260,12 +235,37 @@ En este trabajo práctico se configuró la infraestructura base de control de ve
 4. **Versionado Semántico & Release:**
    - Creación y publicación del tag anotado **`v1.0.0`** y Release asociada con notas de cambios.
 
-### 📂 Estructura de Documentación del TP1
+#### Cómo se suben los cambios (flujo de Pull Request)
+
+Como `main` está protegida (punto 1 de arriba), **nunca se pushea directo** — todo cambio, de cualquier TP, entra por una rama y un PR:
+
+```bash
+git checkout -b feature/lo-que-cambiaste
+git status                                 # revisá qué se modificó antes de agregarlo
+git add archivo1 archivo2                  # evitar "git add ." a ciegas
+git commit -m "Descripción breve de lo que cambiaste"
+git push -u origin feature/lo-que-cambiaste
+```
+
+Después, desde GitHub (o `gh pr create`): abrí un Pull Request de tu rama hacia `main`, revisalo, y mergealo con **Squash and Merge**. Por último, traé el cambio a tu rama local:
+
+```bash
+git checkout main
+git pull
+```
+
+Notas:
+
+- Un `git push origin main` directo va a ser **rechazado** por la protección de rama — es la prueba del punto 1, no un error tuyo (ver `evidencias.md`).
+- Los archivos como `backend/.env`, `.env`, `backend/db.sqlite3`, `backend/media/`, `backend/.venv/`, `node_modules/` **no van a aparecer** en `git status` — están en `.gitignore` a propósito, no se suben.
+- Si es tu primera vez configurando git en esta máquina, puede pedirte usuario/contraseña o un token de acceso personal de GitHub (no la contraseña de tu cuenta) — GitHub ya no acepta contraseña común para `git push` por HTTPS.
+
+#### 📂 Estructura de Documentación del TP1
 
 - **[`decisiones.md`](./decisiones.md):** Contiene la justificación técnica de por qué Git no pudo resolver el conflicto de forma automática, la estrategia de branching seleccionada, los problemas solucionados y la declaración explícita de uso de IA.
 - **[`evidencias.md`](./evidencias.md):** Muestra las capturas de pantalla de los 4 momentos clave (Push directo rechazado, Aviso de conflicto en GitHub, Marcadores de conflicto `<<<<<<<` y Release publicada).
 
-### 🎓 Guía Rápida para la Defensa Oral (P1 - Clase 5)
+#### 🎓 Guía Rápida para la Defensa Oral (P1 - Clase 5)
 
 | Pregunta de la Cátedra | Concepto / Respuesta Clave |
 | :--- | :--- |
@@ -275,30 +275,35 @@ En este trabajo práctico se configuró la infraestructura base de control de ve
 | **¿Por qué usaron Squash y Merge?** | Reemplaza todos los commits intermedios de una rama de feature por uno solo al integrar a `main`. Mantiene la rama principal limpia: `1 commit = 1 funcionalidad unificada`. |
 | **¿Qué mide la versión `v1.0.0`?** | Aplica Versionado Semántico (`MAJOR.MINOR.PATCH`). Indica el primer hito estable y funcional del repositorio (*Baseline*). |
 
-## Subir tus cambios a GitHub (git push)
+### TP2 — Contenedores
 
-Desde la raíz del repo:
+Se contenerizó esta misma app (backend + frontend + base de datos), construida sobre el repositorio y las protecciones que dejó el TP1.
 
-```bash
-git status
-```
+#### Requisitos Implementados & Cumplimiento
 
-Revisá qué archivos cambiaron antes de subir nada. Después:
+1. **Dockerfiles multi-stage:**
+   - Backend: etapa `build` (instala dependencias en un venv) + etapa `final` (solo runtime, sin herramientas de compilación).
+   - Frontend: etapa `build` (Node, compila la SPA) + etapa `final` (nginx sirviendo los estáticos — el toolchain de Node no viaja a producción).
+2. **Orquestación con Compose:**
+   - Volumen nombrado (`db_data`) para persistencia de Postgres.
+   - `depends_on` con `condition: service_healthy` — el backend espera a que la base esté lista, no solo iniciada.
+   - Secretos vía `.env` no versionado, con `.env.example` commiteado.
+3. **Reproducibilidad:** `docker compose up -d` levanta el sistema completo end-to-end con un solo comando — las migraciones de Django se aplican automáticamente al arrancar (`entrypoint.sh`), no requieren un paso manual.
+4. **Publicación:** imágenes de backend y frontend publicadas en `ghcr.io`, con tag semver (`v0.1.1`) y visibilidad pública, verificadas con `docker pull` sin sesión iniciada.
 
-```bash
-git add .
-```
+#### 📂 Estructura de Documentación del TP2
 
-```bash
-git commit -m "Descripción breve de lo que cambiaste"
-```
+- **[`decisiones.md`](./decisiones.md):** justificación de las imágenes base elegidas, la estructura multi-stage, qué persiste y qué no, y los problemas reales encontrados durante la contenerización (incluida una filtración de secretos que se detectó y corrigió).
+- **[`evidencias.md`](./evidencias.md):** salidas de `docker compose up -d --build` desde cero, la prueba de persistencia (`down` conserva datos, `down -v` los borra), comparación de tamaño de imágenes, y las imágenes publicadas en el registry.
 
-```bash
-git push origin main
-```
+#### 🎓 Guía Rápida para la Defensa Oral
 
-Notas:
-
-- `git status` te muestra en gris/rojo los archivos modificados o nuevos. Los archivos como `backend/.env`, `backend/db.sqlite3`, `backend/media/`, `backend/.venv/` y `frontend/node_modules/` **no van a aparecer** — están en `.gitignore` a propósito, no se suben.
-- Si `git push` rechaza el push porque el remoto tiene commits que vos no tenés localmente, corré primero `git pull origin main` y resolvé conflictos si aparecen, y recién ahí repetí el `git push`.
-- Si es tu primera vez configurando git en esta máquina, puede pedirte usuario/contraseña o un token de acceso personal de GitHub (no la contraseña de tu cuenta) — GitHub ya no acepta contraseña común para `git push` por HTTPS.
+| Pregunta de la Cátedra | Concepto / Respuesta Clave |
+| :--- | :--- |
+| **¿Diferencia entre imagen y contenedor?** | La imagen es el paquete inmutable (capas de solo lectura); el contenedor es una instancia en ejecución de esa imagen, con su propia capa de escritura efímera. |
+| **¿`CMD` vs `ENTRYPOINT`?** | `ENTRYPOINT` define el ejecutable fijo del contenedor; acá es `["./entrypoint.sh"]`, que corre `migrate` y después `exec gunicorn ...` — reemplaza el proceso para que gunicorn reciba las señales de Docker directamente. |
+| **¿Por qué multi-stage?** | Separa lo necesario para *compilar/instalar* de lo necesario para *ejecutar*. En el frontend el ahorro es grande (Node completo vs. solo nginx + estáticos); en el backend el ahorro de tamaño es chico (Python no tiene un "SDK" tan pesado como .NET), pero igual aísla el paso de instalación para mejor cacheo. |
+| **¿Qué pasa con los datos si borro el contenedor de la BD?** | Nada — persisten en el volumen nombrado `db_data`, que Docker administra aparte del contenedor. Solo `docker compose down -v` borra también el volumen. |
+| **¿Cómo se encuentra el backend con la BD?** | Por nombre de servicio: `Host=db` en la connection string. Compose crea una red interna con DNS embebido donde cada servicio es alcanzable por su nombre. |
+| **¿Por qué `depends_on` solo no alcanza?** | Solo garantiza el orden de *arranque* del contenedor, no que el proceso adentro ya acepte conexiones. El `healthcheck` (`pg_isready`) + `condition: service_healthy` esperan a que Postgres esté realmente listo. |
+| **¿Por qué el `.env` no está en el repo?** | Porque tiene la contraseña real de la base. Se commitea solo `.env.example` (sin valores reales) y cada quien crea su propio `.env` local con `cp`. |
