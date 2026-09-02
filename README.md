@@ -3,7 +3,7 @@
 > **Materia:** Ingeniería del Software 3 — UCC 2026
 > **Alumno:** Salvador Solana Allende
 > **Instructor:** Ing. Ariel Schwindt
-> **Versión Actual:** `v1.0.0` (TP1 Completo) — TP2 (Contenedores) resuelto sobre esta misma base
+> **Versión Actual:** `v1.0.0` (TP1 Completo) — TP2 (Contenedores) y TP3 (Planificación y trazabilidad) resueltos sobre esta misma base
 
 App web del Club La Tablada — proyecto de Ingeniería de Software 3 / DevOps.
 
@@ -307,3 +307,40 @@ Se contenerizó esta misma app (backend + frontend + base de datos), construida 
 | **¿Cómo se encuentra el backend con la BD?** | Por nombre de servicio: `Host=db` en la connection string. Compose crea una red interna con DNS embebido donde cada servicio es alcanzable por su nombre. |
 | **¿Por qué `depends_on` solo no alcanza?** | Solo garantiza el orden de *arranque* del contenedor, no que el proceso adentro ya acepte conexiones. El `healthcheck` (`pg_isready`) + `condition: service_healthy` esperan a que Postgres esté realmente listo. |
 | **¿Por qué el `.env` no está en el repo?** | Porque tiene la contraseña real de la base. Se commitea solo `.env.example` (sin valores reales) y cada quien crea su propio `.env` local con `cp`. |
+
+### TP3 — Planificación y trazabilidad
+
+Se montó la gestión del proyecto sobre este mismo repositorio en GitHub Projects: jerarquía de trabajo, sprint, tablero y trazabilidad demostrable entre requerimientos y Pull Requests, sobre la app ya contenerizada (TP2) y el flujo de Git del TP1.
+
+#### Requisitos Implementados & Cumplimiento
+
+1. **Jerarquía de trabajo (issues + sub-issues):**
+   - 1 épica: [`EPIC: Pipeline DevOps completo para mi app` (#15)](https://github.com/salvadorsolana04/club-tablada-devops/issues/15).
+   - 1 historia de usuario con 4 criterios de aceptación, colgada de la épica: [`CI: build y tests automáticos en cada PR` (#16)](https://github.com/salvadorsolana04/club-tablada-devops/issues/16).
+   - 2 tareas técnicas colgadas de la historia: [#17](https://github.com/salvadorsolana04/club-tablada-devops/issues/17) y [#18](https://github.com/salvadorsolana04/club-tablada-devops/issues/18).
+   - 1 bug al costado de la jerarquía (no cuelga de ninguna historia): [#19](https://github.com/salvadorsolana04/club-tablada-devops/issues/19).
+2. **Sprint y tablero:**
+   - Proyecto público: [`IngSoft3 - Mi App DevOps`](https://github.com/users/salvadorsolana04/projects/1).
+   - Sprint de 2 semanas (`Sprint 1`, campo Iteration), con la historia y sus 2 tareas asignadas.
+   - Vista Board con columnas de flujo (`Todo` / `In Progress` / `Done`) y automatización mínima (`Item closed → Status: Done`, activa por defecto en todo Project nuevo).
+   - Límite de trabajo en progreso: **2**, en la columna *In Progress*.
+3. **Trazabilidad:**
+   - [PR #20](https://github.com/salvadorsolana04/club-tablada-devops/pull/20) agrega `.github/workflows/ci.yml` (esqueleto que se completa en el TP4) y cierra automáticamente la tarea #17 vía `Closes #17` al mergearse.
+   - Desde la tarea cerrada se navega al PR y su commit, y de ahí hacia arriba a la historia (#16) y la épica (#15).
+
+#### 📂 Estructura de Documentación del TP3
+
+- **[`decisiones.md`](./decisiones.md):** duración del sprint y su porqué, número del límite de WIP y su porqué, diagnóstico de la historia mal escrita, problemas encontrados (incluida la falta de soporte del CLI de `gh` para vistas/límites de Project) y declaración de uso de IA.
+- No hay `evidencias.md` para este TP: el entregable es el [Project público](https://github.com/users/salvadorsolana04/projects/1), verificable en vivo por quien corrige.
+
+#### 🎓 Guía Rápida para la Defensa Oral
+
+| Pregunta de la Cátedra | Concepto / Respuesta Clave |
+| :--- | :--- |
+| **¿Diferencia entre épica, historia y tarea?** | Zoom: la épica es el objetivo del semestre (semanas/meses), la historia es un incremento de valor observable por un rol (días), la tarea es trabajo técnico concreto dentro de esa historia (horas). |
+| **¿Por qué el bug no cuelga de la historia?** | Porque la jerarquía representa lo que se planificó construir; un bug es un defecto de algo **ya entregado**. Si aparece antes de cerrar la historia, no es un bug — es que la historia todavía no cumple sus criterios de aceptación. |
+| **¿Por qué el número de la tarea y no el de la historia en `Closes #N`?** | El PR implementa una tarea concreta, no toda la historia. Si cerrara la historia, quedaría marcada como terminada con la otra tarea sin hacer — trazabilidad mentirosa. |
+| **¿Qué te da GitHub Projects que un Trello no te da?** | El enlace es de datos, no manual: un PR puede cerrar el issue que lo originó, y el issue muestra en su historial qué PR/commits lo implementaron — sin que nadie tenga que actualizar dos herramientas a mano. |
+| **¿Por qué 2 semanas de sprint y por qué límite de WIP 2?** | Ver `decisiones.md`, puntos 1 y 2 — justificado contra el ritmo de entregas de la cursada y la regla "personas + 1" trabajando solo. |
+
+

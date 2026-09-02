@@ -55,3 +55,34 @@ Se usó **Claude Code** en todo el proceso de contenerización:
 - Escritura inicial de los Dockerfiles, `.dockerignore`, `nginx.conf`, `docker-compose.yml` y `docker-compose.registry.yml`.
 - **Auditoría posterior**: se le pidió a Claude Code que revisara lo ya resuelto por el estudiante contra el enunciado del TP2. Encontró los tres problemas detallados en la sección 3, verificándolos con comandos reales contra el sistema levantado (no una revisión solo teórica del código): corrió `docker run` para extraer el `.env` filtrado, leyó los logs de migraciones pendientes, e hizo la prueba de persistencia completa (`down`/`up` conserva datos, `down -v` los borra) antes y después de aplicar la corrección.
 - Verificación propia del estudiante: se repitió a mano la prueba de persistencia y el login de los usuarios de prueba contra `http://localhost:3000` (a través del proxy de nginx, el mismo camino que usa la app real en el navegador) para confirmar que el sistema funciona de punta a punta, no solo que los comandos no tiraban error.
+
+---
+
+## TP3 — Planificación y trazabilidad
+
+### 1. Duración del sprint
+
+Se eligió un sprint de **2 semanas (14 días)**. Trabajando solo y con los TPs de la materia entregándose cada 1-2 semanas, un sprint semanal generaría casi tanto overhead de planificación como trabajo real hecho; uno de un mes diluye demasiado el objetivo del sprint y tapa señales de atraso hasta muy tarde. Dos semanas da margen para terminar una historia completa (historia + 2 tareas) sin que el sprint quede vacío de contenido, y se alinea razonablemente con el ritmo de entregas quincenal/semanal de la cursada.
+
+### 2. Límite de trabajo en progreso
+
+Se configuró un **límite de 2** en la columna *In Progress*. Es la regla de arranque de la guía (personas + 1) aplicada a trabajar solo: 1 persona + 1 de margen para no bloquearse cuando algo queda esperando (una revisión, una respuesta, un `docker build` corriendo) y hay que poder avanzar en otra cosa sin que eso signifique tener tres o cuatro tareas a medio terminar en simultáneo. Señal para subirlo: si la columna nunca llega a 2, es porque en la práctica ya estoy trabajando de a una — bajarlo a 1 sería más honesto con el flujo real; para subirlo haría falta evidencia de que 2 frena trabajo real y no elección apurada.
+
+### 3. Diagnóstico de la historia mal escrita
+
+`Como desarrollador quiero crear la tabla usuarios para guardar los datos` **no es una historia, es una tarea disfrazada**: el "quiero" describe una acción técnica de implementación (crear una tabla), no una capacidad observable por un usuario real — ningún stakeholder pide una tabla, la pide como medio para algo. Tampoco es *Valuable* ni *Testeable* en el sentido de la guía: no hay forma de escribir un criterio de aceptación verificable por alguien ajeno al código ("¿la tabla quedó bien creada?" no es una pregunta que le importe al cliente).
+
+Reescrita como historia de verdad: *Como usuario del club quiero registrarme con usuario y contraseña para poder acceder a las noticias y mensajes de mi división.* Ahí sí hay rol, capacidad observable (puedo registrarme y entrar) y beneficio (acceso al contenido de mi división) — y "crear la tabla usuarios" pasa a ser una de las **tareas técnicas** dentro de esa historia, no la historia en sí.
+
+### 4. Problemas encontrados y cómo los resolví
+
+- **`gh` (GitHub CLI) no estaba instalado y Homebrew estaba roto** en esta máquina (`brew` no reconoce la versión de macOS instalada, `unknown or unsupported macOS version: "26.2"`, y falla antes de poder instalar nada). Se resolvió descargando el binario de `gh` directo desde los releases de GitHub (`gh_2.99.0_macOS_arm64.zip`) y copiándolo a `~/.local/bin`, que ya estaba en el `PATH`.
+- **El token de `gh` no tenía el scope `project`.** `gh auth login` pide explícitamente los scopes al loguearse (`--scopes "project,repo,read:org"`); se autenticó con el flujo por navegador (device code), como indica la guía.
+- **El CLI de `gh` no cubre todo lo que pide el TP.** `gh project` no tiene forma de crear una vista Board, agrupar por `Status`, ni configurar el límite de WIP de una columna — esas operaciones no están expuestas ni por el CLI ni por la API GraphQL pública de Projects (se confirmó introspeccionando el schema: no existe mutación para límites de columna, y `updateProjectV2View` no acepta un campo de agrupamiento). Se resolvió a medias: la vista Board y el campo Sprint (Iteration) sí se pudieron crear llamando directo a la API GraphQL (`gh api graphql`, mutaciones `createProjectV2View` y `createProjectV2Field`); el límite de WIP de la columna *In Progress* y la confirmación visual del agrupamiento por `Status` quedaron como el único paso manual, hecho una vez desde la web del proyecto.
+- **Mergear el PR de trazabilidad requirió confirmación explícita.** El modo automático de Claude Code bloquea por política cualquier acción que modifique estado compartido/visible (como mergear a `main`), aunque el resto del TP se hizo sin supervisión — se pidió confirmación antes de ese paso puntual.
+
+### 5. Declaración de uso de IA (TP3)
+
+Se usó **Claude Code** para resolver el TP3 de punta a punta, de forma autónoma (el estudiante dio el objetivo y se ausentó durante la ejecución): instalación y autenticación de `gh` CLI, creación de las tres labels (`epic`/`story`/`task`), creación de la épica, la historia (con sus 4 criterios de aceptación), las 2 tareas, el bug y su jerarquía como sub-issues; creación del Project público, el campo Sprint (Iteration, vía API GraphQL porque el CLI no lo soporta) y la asignación de la historia y sus tareas a `Sprint 1`; la vista Board; y el workflow `ci.yml` esqueleto + el Pull Request (#20) que cierra la tarea #17 con `Closes #17`.
+
+Verificación: se revisó el diff del PR antes de mergear (`gh pr diff`), se confirmó por API que la jerarquía quedó bien enlazada (`subIssuesSummary` de la épica y la historia) y que el Project quedó en visibilidad pública (`gh project view --format json`). El estudiante debe poder explicar en la defensa por qué eligió esa duración de sprint y ese límite de WIP (puntos 1 y 2 de arriba, redactados por el estudiante en base a la regla de la guía, no generados por la IA), y diagnosticar en vivo una historia mal escrita como se hizo en el punto 3.
