@@ -1,5 +1,7 @@
 # Club La Tablada
 
+[![CI](https://github.com/salvadorsolana04/club-tablada-devops/actions/workflows/ci.yml/badge.svg)](https://github.com/salvadorsolana04/club-tablada-devops/actions/workflows/ci.yml)
+
 > **Materia:** Ingeniería del Software 3 — UCC 2026
 > **Alumno:** Salvador Solana Allende
 > **Instructor:** Ing. Ariel Schwindt
