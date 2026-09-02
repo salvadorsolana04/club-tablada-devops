@@ -344,3 +344,4 @@ Se montó la gestión del proyecto sobre este mismo repositorio en GitHub Projec
 | **¿Por qué 2 semanas de sprint y por qué límite de WIP 2?** | Ver `decisiones.md`, puntos 1 y 2 — justificado contra el ritmo de entregas de la cursada y la regla "personas + 1" trabajando solo. |
 
 
+
