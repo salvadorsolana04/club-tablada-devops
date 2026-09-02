@@ -3,7 +3,7 @@
 > **Materia:** Ingeniería del Software 3 — UCC 2026
 > **Alumno:** Salvador Solana Allende
 > **Instructor:** Ing. Ariel Schwindt
-> **Versión Actual:** `v1.0.0` (TP1 Completo) — TP2 (Contenedores) y TP3 (Planificación y trazabilidad) resueltos sobre esta misma base
+> **Versión Actual:** `v3.0.0` (TP1 Git, TP2 Contenedores y TP3 Planificación y trazabilidad completos)
 
 App web del Club La Tablada — proyecto de Ingeniería de Software 3 / DevOps.
 
