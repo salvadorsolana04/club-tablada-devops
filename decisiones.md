@@ -86,3 +86,35 @@ Reescrita como historia de verdad: *Como usuario del club quiero registrarme con
 Se usó **Claude Code** para resolver el TP3 de punta a punta, de forma autónoma (el estudiante dio el objetivo y se ausentó durante la ejecución): instalación y autenticación de `gh` CLI, creación de las tres labels (`epic`/`story`/`task`), creación de la épica, la historia (con sus 4 criterios de aceptación), las 2 tareas, el bug y su jerarquía como sub-issues; creación del Project público, el campo Sprint (Iteration, vía API GraphQL porque el CLI no lo soporta) y la asignación de la historia y sus tareas a `Sprint 1`; la vista Board; y el workflow `ci.yml` esqueleto + el Pull Request (#20) que cierra la tarea #17 con `Closes #17`.
 
 Verificación: se revisó el diff del PR antes de mergear (`gh pr diff`), se confirmó por API que la jerarquía quedó bien enlazada (`subIssuesSummary` de la épica y la historia) y que el Project quedó en visibilidad pública (`gh project view --format json`). El estudiante debe poder explicar en la defensa por qué eligió esa duración de sprint y ese límite de WIP (puntos 1 y 2 de arriba, redactados por el estudiante en base a la regla de la guía, no generados por la IA), y diagnosticar en vivo una historia mal escrita como se hizo en el punto 3.
+
+---
+
+## TP4 — CI: Pipelines as Code
+
+### 1. Estructura del pipeline
+
+Dos jobs (`build-backend`, `build-frontend`) en paralelo, uno por cada Dockerfile del TP2 — la app ya está partida en dos servicios independientes, con su propio contexto de build, así que un solo job mezclando ambos no aportaría nada y sería más lento (los jobs de GitHub Actions corren en runners separados sin compartir filesystem: no hay forma de "compartir trabajo" entre un build de backend y uno de frontend, son builds independientes de entrada). El pipeline dispara en `pull_request` hacia `main` (la corrida que importa: verifica *antes* de mergear) y en `push` a `main` (la que le da estado al badge y deja el cache disponible para el próximo PR). Todavía no corre tests — eso es el TP5 — así que hoy el pipeline verifica una sola cosa: que las dos imágenes se construyan sin errores en una máquina limpia.
+
+### 2. Qué cachea el pipeline y qué pasa si el cache desaparece
+
+Se cachean las **capas de Docker** de cada imagen (`cache-from`/`cache-to: type=gha`), con un `scope` distinto por job (`backend` / `frontend`) para que no se pisen entre sí — sin ese scope los dos jobs comparten el mismo estante y el que termina último borra el cache del otro. Se verificó en una segunda corrida del mismo PR (después de que la primera terminara de subir su cache): el log mostró `CACHED` en las capas de dependencias de los dos jobs (`docker/build-push-action`, pasos de `pip install` y `npm ci`), que no habían cambiado entre una corrida y la otra.
+
+El cache es una optimización, no una dependencia: GitHub puede desalojarlo en cualquier momento (tiene límite de tamaño y antigüedad), y el pipeline tiene que funcionar exactamente igual sin él — solo más lento, reconstruyendo esas capas desde cero. Si el build fallara por la sola ausencia de cache, no era un cache: era una dependencia escondida.
+
+### 3. Por qué el pipeline construye con el Dockerfile en vez de compilar por su cuenta
+
+Porque el Dockerfile del TP2 **ya es** la definición de build de la app — es lo que corre en desarrollo y lo que correría en un despliegue real. Si el workflow compilara aparte (por ejemplo corriendo `pip install` y `npm run build` directo en el runner, sin pasar por las imágenes), habría dos definiciones de "cómo se construye la app" que tarde o temprano divergen, y el pipeline estaría verificando algo distinto de lo que después se ejecuta. Usando el mismo Dockerfile, lo que se verifica en el PR es exactamente lo mismo que se va a correr — no una aproximación.
+
+### 4. Problemas encontrados y cómo los resolví
+
+- **El `ci.yml` del TP3 ya no servía de base.** Era un esqueleto con un solo job `build` que solo hacía `checkout`; se reemplazó entero por los dos jobs reales (`build-backend`/`build-frontend`), tal como avisa la guía — nada del TP3 se reutilizó del archivo, solo la ruta.
+- **Activar el gate (`required_status_checks`) requirió confirmación explícita**, igual que mergear a `main`: el modo automático de Claude Code bloquea cambios a la configuración del repositorio (branch protection) sin autorización puntual del estudiante, aunque el resto del TP se hizo sin supervisión.
+- **La demo del gate necesitaba el workflow real ya mergeado en `main`.** Si se abre el PR de "romper el build" antes de mergear el PR con los jobs reales, el PR de la demo corre contra el `ci.yml` viejo del TP3 (el que solo hace checkout) y da verde con código que no construye — exactamente la advertencia de la guía. Se ordenó la secuencia para mergear primero el pipeline real.
+- **Ver el efecto de `strict: true` (rama desactualizada) necesitó dos PRs abiertos a la vez.** Con uno solo no se puede observar: al mergear el primero, el segundo pasó a `mergeStateStatus: BEHIND` recién ahí — confirmado por API (`gh pr view --json mergeable,mergeStateStatus`) antes y después de actualizar la rama (`gh api --method PUT .../pulls/25/update-branch`), sin necesidad de captura de pantalla porque el TP no pide `evidencias.md` (el repo es público).
+- **La dependencia falsa para romper el build** (`paquete-que-no-existe-xyz123` en `requirements.txt`) se agregó primero sin salto de línea al final del archivo, lo que la fusionaba con la línea anterior en un único requirement inválido — rompía igual, pero por una razón distinta a la buscada (línea malformada, no paquete inexistente). Se corrigió el formato antes de pushear, para que el fallo real sea el que pide la consigna (falla la resolución de la dependencia, no un requirements.txt mal armado).
+
+### 5. Declaración de uso de IA (TP4)
+
+Se usó **Claude Code** para resolver el TP4 de punta a punta, de forma autónoma: reemplazo completo del `ci.yml`, apertura y seguimiento de los 4 Pull Requests (jobs + cache, gate de branch protection vía API, demo del build roto con su PR de relleno, y el badge), y la verificación de cada checkpoint por API/CLI en vez de mirar la web a mano — `gh pr checks` para el estado de cada corrida, `gh run view --log | grep CACHED` para confirmar el cache, y `gh pr view --json mergeable,mergeStateStatus` para confirmar `BLOCKED` con el build roto y `BEHIND`→`CLEAN` con el gate y `strict: true`.
+
+Verificación del estudiante: revisó el diff de cada PR antes de autorizar el merge (pedido explícitamente en cada uno, ver problema 2 de arriba) y puede reproducir en vivo, en la defensa, la secuencia completa rojo→bloqueado→fix→verde sobre el PR #24 y explicar por qué el gate exige esos dos checks puntuales y no otros.

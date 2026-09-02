@@ -1,5 +1,7 @@
 # Club La Tablada
 
+[![CI](https://github.com/salvadorsolana04/club-tablada-devops/actions/workflows/ci.yml/badge.svg)](https://github.com/salvadorsolana04/club-tablada-devops/actions/workflows/ci.yml)
+
 > **Materia:** Ingeniería del Software 3 — UCC 2026
 > **Alumno:** Salvador Solana Allende
 > **Instructor:** Ing. Ariel Schwindt
@@ -342,6 +344,35 @@ Se montó la gestión del proyecto sobre este mismo repositorio en GitHub Projec
 | **¿Por qué el número de la tarea y no el de la historia en `Closes #N`?** | El PR implementa una tarea concreta, no toda la historia. Si cerrara la historia, quedaría marcada como terminada con la otra tarea sin hacer — trazabilidad mentirosa. |
 | **¿Qué te da GitHub Projects que un Trello no te da?** | El enlace es de datos, no manual: un PR puede cerrar el issue que lo originó, y el issue muestra en su historial qué PR/commits lo implementaron — sin que nadie tenga que actualizar dos herramientas a mano. |
 | **¿Por qué 2 semanas de sprint y por qué límite de WIP 2?** | Ver `decisiones.md`, puntos 1 y 2 — justificado contra el ritmo de entregas de la cursada y la regla "personas + 1" trabajando solo. |
+
+### TP4 — CI: Pipelines as Code
+
+Se automatizó la verificación de la app: cada Pull Request y cada push a `main` construyen las dos imágenes (backend y frontend) con los Dockerfiles del TP2, y el pipeline en verde pasó a ser requisito obligatorio para poder mergear.
+
+#### Requisitos Implementados & Cumplimiento
+
+1. **Workflow como código:** `.github/workflows/ci.yml` reemplaza el esqueleto del TP3, entrado por PR ([#23](https://github.com/salvadorsolana04/club-tablada-devops/pull/23)). Dispara en `pull_request` y `push` hacia `main`.
+2. **Build en paralelo:** dos jobs, `build-backend` y `build-frontend`, cada uno con su Dockerfile del TP2 (`push: false` — hoy solo se verifica que compilen, no se publican).
+3. **Cache de capas:** `docker/setup-buildx-action` + `cache-from`/`cache-to: type=gha`, con `scope` distinto por job. Confirmado con una segunda corrida del mismo PR mostrando `CACHED` en el log de ambos jobs.
+4. **Gate del PR:** `required_status_checks` sobre `main` exigiendo `build-backend` y `build-frontend` en verde, con `strict: true` (rama actualizada) — sumado a las 0 approvals + `enforce_admins` del TP1, sin tocarlos.
+5. **Demo del gate actuando** ([PR #24](https://github.com/salvadorsolana04/club-tablada-devops/pull/24)): build roto a propósito (dependencia inexistente) → `build-backend` en rojo → merge `BLOCKED` → fix en un commit → verde → merge. El [PR #25](https://github.com/salvadorsolana04/club-tablada-devops/pull/25), abierto en simultáneo, muestra el efecto de `strict: true`: pasó a `BEHIND` apenas se mergeó el #24, y necesitó `Update branch` antes de poder mergearse.
+6. **Badge de estado:** en la parte superior de este README, entrado por [PR #26](https://github.com/salvadorsolana04/club-tablada-devops/pull/26) (ya con el gate activo).
+
+#### 📂 Estructura de Documentación del TP4
+
+- **[`decisiones.md`](./decisiones.md):** por qué esos dos jobs y en paralelo, qué cachea el pipeline y qué pasa si el cache desaparece, por qué construye con el Dockerfile en vez de compilar por su cuenta, problemas encontrados y declaración de uso de IA.
+- No hay `evidencias.md` para este TP: el repositorio es público y la pestaña *Actions*, los PRs y el badge muestran todo en vivo.
+
+#### 🎓 Guía Rápida para la Defensa Oral
+
+| Pregunta de la Cátedra | Concepto / Respuesta Clave |
+| :--- | :--- |
+| **¿CI sin pipeline, o pipeline sin CI?** | CI es la práctica (integrar seguido, verificar cada integración); el pipeline es la herramienta. Se puede tener un pipeline que nadie usa como gate (decoración) sin que haya CI real, y se podría hacer CI a mano sin pipeline (poco práctico, pero conceptualmente posible). |
+| **¿Qué NO comparten dos jobs en paralelo?** | El filesystem: cada uno corre en un runner limpio distinto. Si uno necesitara algo del otro, tendría que viajar como artefacto o declararse `needs:`. |
+| **¿Qué es el cache y qué pasa si desaparece?** | Las capas de Docker que no cambiaron desde la corrida anterior. Puede desalojarse en cualquier momento; el pipeline tiene que funcionar igual sin él, solo más lento — si fallara sin cache, era una dependencia escondida, no un cache. |
+| **¿Por qué construye con el Dockerfile en vez de compilar por su cuenta?** | Para no tener dos definiciones de build que diverjan: lo que el pipeline verifica es exactamente lo mismo que corre en desarrollo/producción, no una aproximación. |
+| **¿Qué dos condiciones exige `main` para aceptar un merge?** | Los checks `build-backend` y `build-frontend` en verde (`required_status_checks`), y la rama actualizada con `main` (`strict: true`) — además de las 0 approvals + `enforce_admins` que ya exigía el TP1. |
+| **¿Qué significa `strict: true`?** | Que un PR con checks verdes pero desactualizado respecto a `main` igual queda bloqueado (`BEHIND`) hasta hacer `Update branch` y que el pipeline corra sobre la mezcla real que se va a integrar. |
 
 
 
