@@ -323,7 +323,7 @@ Se montó la gestión del proyecto sobre este mismo repositorio en GitHub Projec
    - 1 bug al costado de la jerarquía (no cuelga de ninguna historia): [#19](https://github.com/salvadorsolana04/club-tablada-devops/issues/19).
 2. **Sprint y tablero:**
    - Proyecto público: [`IngSoft3 - Mi App DevOps`](https://github.com/users/salvadorsolana04/projects/1).
-   - Sprint de 2 semanas (`Sprint 1`, campo Iteration), con la historia y sus 2 tareas asignadas.
+   - Sprint de 1 semana (`Sprint 1`, campo Iteration), con la historia y sus 2 tareas asignadas.
    - Vista Board con columnas de flujo (`Todo` / `In Progress` / `Done`) y automatización mínima (`Item closed → Status: Done`, activa por defecto en todo Project nuevo).
    - Límite de trabajo en progreso: **2**, en la columna *In Progress*.
 3. **Trazabilidad:**
@@ -343,7 +343,7 @@ Se montó la gestión del proyecto sobre este mismo repositorio en GitHub Projec
 | **¿Por qué el bug no cuelga de la historia?** | Porque la jerarquía representa lo que se planificó construir; un bug es un defecto de algo **ya entregado**. Si aparece antes de cerrar la historia, no es un bug — es que la historia todavía no cumple sus criterios de aceptación. |
 | **¿Por qué el número de la tarea y no el de la historia en `Closes #N`?** | El PR implementa una tarea concreta, no toda la historia. Si cerrara la historia, quedaría marcada como terminada con la otra tarea sin hacer — trazabilidad mentirosa. |
 | **¿Qué te da GitHub Projects que un Trello no te da?** | El enlace es de datos, no manual: un PR puede cerrar el issue que lo originó, y el issue muestra en su historial qué PR/commits lo implementaron — sin que nadie tenga que actualizar dos herramientas a mano. |
-| **¿Por qué 2 semanas de sprint y por qué límite de WIP 2?** | Ver `decisiones.md`, puntos 1 y 2 — justificado contra el ritmo de entregas de la cursada y la regla "personas + 1" trabajando solo. |
+| **¿Por qué 1 semana de sprint y por qué límite de WIP 2?** | Ver `decisiones.md`, puntos 1 y 2 — el sprint sigue el ritmo real de entregas (1 TP por semana) y el límite de WIP sale de la regla "personas + 1" trabajando solo. |
 
 ### TP4 — CI: Pipelines as Code
 

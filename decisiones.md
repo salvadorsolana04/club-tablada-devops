@@ -62,7 +62,7 @@ Se usó **Claude Code** en todo el proceso de contenerización:
 
 ### 1. Duración del sprint
 
-Se eligió un sprint de **2 semanas (14 días)**. Trabajando solo y con los TPs de la materia entregándose cada 1-2 semanas, un sprint semanal generaría casi tanto overhead de planificación como trabajo real hecho; uno de un mes diluye demasiado el objetivo del sprint y tapa señales de atraso hasta muy tarde. Dos semanas da margen para terminar una historia completa (historia + 2 tareas) sin que el sprint quede vacío de contenido, y se alinea razonablemente con el ritmo de entregas quincenal/semanal de la cursada.
+Se eligió un sprint de **1 semana (7 días)**. Cada TP de la materia se entrega aproximadamente cada semana, y en este repositorio cada sprint mapea a un TP: el Sprint Goal es "cerrar el TP de la semana", así que la duración del sprint sigue directamente el ritmo real de entregas en vez de un número arbitrario. Un sprint más largo (dos semanas o un mes) desalinearía el sprint del calendario real de la cursada — el TP quedaría a mitad de un sprint que todavía no cerró.
 
 ### 2. Límite de trabajo en progreso
 
@@ -80,6 +80,7 @@ Reescrita como historia de verdad: *Como usuario del club quiero registrarme con
 - **El token de `gh` no tenía el scope `project`.** `gh auth login` pide explícitamente los scopes al loguearse (`--scopes "project,repo,read:org"`); se autenticó con el flujo por navegador (device code), como indica la guía.
 - **El CLI de `gh` no cubre todo lo que pide el TP.** `gh project` no tiene forma de crear una vista Board, agrupar por `Status`, ni configurar el límite de WIP de una columna — esas operaciones no están expuestas ni por el CLI ni por la API GraphQL pública de Projects (se confirmó introspeccionando el schema: no existe mutación para límites de columna, y `updateProjectV2View` no acepta un campo de agrupamiento). Se resolvió a medias: la vista Board y el campo Sprint (Iteration) sí se pudieron crear llamando directo a la API GraphQL (`gh api graphql`, mutaciones `createProjectV2View` y `createProjectV2Field`); el límite de WIP de la columna *In Progress* y la confirmación visual del agrupamiento por `Status` quedaron como el único paso manual, hecho una vez desde la web del proyecto.
 - **Mergear el PR de trazabilidad requirió confirmación explícita.** El modo automático de Claude Code bloquea por política cualquier acción que modifique estado compartido/visible (como mergear a `main`), aunque el resto del TP se hizo sin supervisión — se pidió confirmación antes de ese paso puntual.
+- **Cambiar la duración del sprint de 2 a 1 semana desasignó la historia y sus tareas del sprint.** El campo Sprint es un campo *Iteration*, y su configuración (duración, iteraciones) se reemplaza entera al editarla vía API — la iteración "Sprint 1" quedó con un ID interno nuevo, y los items que apuntaban al ID viejo perdieron la asignación (se confirmó con `gh project item-list`, que mostraba `sprint: None` en los tres). Se resolvió reasignando la historia y sus dos tareas a la iteración nueva con `gh project item-edit --iteration-id`.
 
 ### 5. Declaración de uso de IA (TP3)
 
