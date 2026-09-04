@@ -117,11 +117,6 @@ Porque el Dockerfile del TP2 **ya es** la definición de build de la app — es 
 
 ### Declaración de uso de IA (TP4)
 
-Se utilizó **Claude Code** (Anthropic) como herramienta facilitadora y asistente en la construcción y optimización del pipeline de integración continua:
+Se usó Claude Code para la asistencia de ejecucion en los pasos TP4 completo. Hoy el pipeline solo construye las dos imágenes — no corre tests ni lint ni publica artefactos, porque eso es explícitamente el TP5.
 
-- **Estructura y sintaxis de GitHub Actions**: asistencia en la redacción y orden del workflow `.github/workflows/ci.yml` (jobs, steps, acciones del marketplace y matrices de entorno), asegurando que los pasos de build, linting y testing corrieran de manera aislada y reproducible.
-- **Validación del paso a paso**: se utilizó como guía de control para verificar que se cumplieran todos los requisitos técnicos en secuencia (triggers por PR hacia `main`, publicación de reportes de test como artefactos descargables, y configuración del badge de estado en el README).
-- **Troubleshooting de ejecución en CI**: soporte para diagnosticar fallos de entorno en los runners de GitHub (manejo de dependencias, variables de entorno requeridas y configuración de servicios en Docker/base de datos dentro del runner) antes de subir los cambios definitivos.
-
-**Verificación propia**:
-Levanté las pruebas y linters en local antes de commitear, abrí los Pull Requests hacia `main` para comprobar que el workflow disparara en las condiciones esperadas, y forcé intencionalmente un test roto para verificar que el pipeline fallara y bloqueara el merge con las protecciones de rama activas. También corroboré manualmente en la pestaña *Actions* que los artefactos de test se generaran correctamente y que el badge del README reflejara en tiempo real el estado en verde tras el merge. Comprendo y soy capaz de defender en la instancia oral la arquitectura del workflow, cada step configurado y el criterio detrás de la estrategia de integración continua implementada.
+Verificación propia: revisé el diff de cada Pull Request antes de autorizar el merge (cada uno requirió mi confirmación explícita antes de aplicarse), miré correr el pipeline en la pestaña Actions, y confirmé el cache buscando la palabra CACHED en el log de la segunda corrida. Puedo reproducir en vivo, en la defensa, la secuencia rojo→bloqueado→fix→verde sobre el PR que rompió el build, y explicar por qué el gate exige esos dos checks puntuales.
