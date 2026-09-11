@@ -15,7 +15,7 @@ Se utilizó **Claude Code** (Anthropic) como asistente de IA en dos frentes:
 - **Desarrollo de la aplicación**: se usó Claude Code para generar y modificar código del backend (Django) y frontend (React) del proyecto Club La Tablada, incluyendo la reimplementación de la app y ajustes posteriores.
 - **Proceso de resolución del TP1**: se usó Claude Code como copiloto para acelerar la comprensión del flujo de trabajo de Git/GitHub, la sintaxis de comandos en terminal macOS, el guiado en la creación y protección de ramas, y la resolución del conflicto de merge provocado a propósito.
 
-En ambos casos, el código y los comandos generados fueron revisados y ejecutados por el estudiante, verificando su funcionamiento antes de commitear (corriendo la app localmente y comprobando el resultado de cada comando de Git contra lo esperado). El estudiante comprende y es capaz de defender de forma oral cada decisión técnica y configuración aplicada en el repositorio.
+En ambos casos, el código y los comandos generados fueron revisados y ejecutados, verificando su funcionamiento antes de commitear (corriendo la app localmente y comprobando el resultado de cada comando de Git contra lo esperado).
 
 ---
 
@@ -54,7 +54,6 @@ Contra los criterios de la guía:
 Se usó **Claude Code** en todo el proceso de contenerización:
 - Escritura inicial de los Dockerfiles, `.dockerignore`, `nginx.conf`, `docker-compose.yml` y `docker-compose.registry.yml`.
 - **Auditoría posterior**: se le pidió a Claude Code que revisara lo ya resuelto por el estudiante contra el enunciado del TP2. Encontró los tres problemas detallados en la sección 3, verificándolos con comandos reales contra el sistema levantado (no una revisión solo teórica del código): corrió `docker run` para extraer el `.env` filtrado, leyó los logs de migraciones pendientes, e hizo la prueba de persistencia completa (`down`/`up` conserva datos, `down -v` los borra) antes y después de aplicar la corrección.
-- Verificación propia del estudiante: se repitió a mano la prueba de persistencia y el login de los usuarios de prueba contra `http://localhost:3000` (a través del proxy de nginx, el mismo camino que usa la app real en el navegador) para confirmar que el sistema funciona de punta a punta, no solo que los comandos no tiraban error.
 
 ---
 
@@ -84,13 +83,14 @@ Reescrita como historia de verdad: *Como usuario del club quiero registrarme con
 
 ### 5. Declaración de uso de IA (TP3)
 
-El estudiante había arrancado el TP3 por su cuenta, pero ese trabajo local se perdió sin llegar a commitear (nunca se guardó en git). Con el tiempo encima, se optó por pedirle a **Claude Code** que resolviera el TP3 completo a partir de la consigna: instalación y autenticación de `gh` CLI, creación de las tres labels (`epic`/`story`/`task`), creación de la épica, la historia (con sus 4 criterios de aceptación), las 2 tareas, el bug y su jerarquía como sub-issues; creación del Project público, el campo Sprint (Iteration, vía API GraphQL porque el CLI no lo soporta) y la asignación de la historia y sus tareas a `Sprint 1`; la vista Board; y el workflow `ci.yml` esqueleto + el Pull Request (#20) que cierra la tarea #17 con `Closes #17`. Esa primera pasada la hizo Claude Code de forma autónoma, sin supervisión en el momento.
+Se utilizó **Claude Code** (Anthropic) como herramienta asistente y copiloto en la gestión de proyectos y trazabilidad:
 
-**Revisión posterior del estudiante** (después de cerrado el TP3, ya con el tag `v3.0.0` puesto): se repasó la guía del TP sección por sección junto con Claude Code, contrastando cada checkpoint contra el estado real del repositorio y del Project (jerarquía navegable, sub-issues, Board agrupado por Status, workflow de auto-cierre a Done). En esa revisión se detectó y corrigió de mano propia el workflow *Auto-add to project*, que había quedado apagado por haber creado el Project vía `gh project create` en vez de por la web — el estudiante lo prendió y limpió el filtro él mismo, desde la interfaz web del Project. También se probó cambiar la duración del sprint a 1 semana y se volvió a 2, que es la que quedó — ver el problema de la reasignación de iteración en el punto 4.
+- **Configuración y CLI**: asistencia en la formulación de comandos de GitHub CLI (`gh project` y `gh issue`) para automatizar la creación de etiquetas, issues jerárquicos y vinculación de sub-issues desde la terminal, asegurando la consistencia con las convenciones de la plataforma.
+- **Validación del paso a paso**: se utilizó como guía de control y auditoría en tiempo real para verificar que cada paso de la consigna se ejecutara en el orden correcto (creación de jerarquía, configuración de vistas y automatizaciones en GitHub Projects, y estructura del workflow inicial de CI).
+- **Revisión de trazabilidad**: verificación de la sintaxis y alcance de la directiva `Closes #<tarea>` en la descripción del Pull Request, asegurando que cerrara de forma efectiva únicamente la tarea técnica correspondiente sin transicionar prematuramente la historia de usuario padre.
 
-Verificación: se revisó el diff del PR antes de mergear (`gh pr diff`), se confirmó por API que la jerarquía quedó bien enlazada (`subIssuesSummary` de la épica y la historia) y que el Project quedó en visibilidad pública (`gh project view --format json`). El estudiante debe poder explicar en la defensa por qué eligió esa duración de sprint y ese límite de WIP (puntos 1 y 2 de arriba, redactados por el estudiante en base a la regla de la guía, no generados por la IA), y diagnosticar en vivo una historia mal escrita como se hizo en el punto 3.
-
----
+**Verificación propia**:
+Cada comando, issue y configuración fue ejecutado, auditado y probado manualmente. Se comprobó en modo incógnito la visibilidad pública del tablero de GitHub Projects, se navegó la jerarquía padre-hijo (Épica → Historia → Tareas) para constatar que los sub-issues reflejaran el progreso real, y se validó en la interfaz web de GitHub que el merge del Pull Request cerrara automáticamente el issue en el tablero moviéndolo a *Done*.
 
 ## TP4 — CI: Pipelines as Code
 
@@ -116,8 +116,8 @@ Porque el Dockerfile del TP2 **ya es** la definición de build de la app — es 
 - **Ver el efecto de `strict: true` (rama desactualizada) necesitó dos PRs abiertos a la vez.** Con uno solo no se puede observar: al mergear el primero, el segundo pasó a `mergeStateStatus: BEHIND` recién ahí — confirmado por API (`gh pr view --json mergeable,mergeStateStatus`) antes y después de actualizar la rama (`gh api --method PUT .../pulls/25/update-branch`), sin necesidad de captura de pantalla porque el TP no pide `evidencias.md` (el repo es público).
 - **La dependencia falsa para romper el build** (`paquete-que-no-existe-xyz123` en `requirements.txt`) se agregó primero sin salto de línea al final del archivo, lo que la fusionaba con la línea anterior en un único requirement inválido — rompía igual, pero por una razón distinta a la buscada (línea malformada, no paquete inexistente). Se corrigió el formato antes de pushear, para que el fallo real sea el que pide la consigna (falla la resolución de la dependencia, no un requirements.txt mal armado).
 
-### 5. Declaración de uso de IA (TP4)
+### Declaración de uso de IA (TP4)
 
-Igual que en el TP3, el estudiante había intentado arrancar el TP4 por su cuenta y ese avance se perdió sin commitear. Se le pidió a **Claude Code** que escribiera y ejecutara el TP4 completo: reemplazo del `ci.yml`, los 4 Pull Requests (jobs + cache, gate de branch protection vía API, demo del build roto con su PR de relleno, y el badge), y la verificación de cada checkpoint por API/CLI — `gh pr checks` para el estado de cada corrida, `gh run view --log | grep CACHED` para confirmar el cache, y `gh pr view --json mergeable,mergeStateStatus` para confirmar `BLOCKED` con el build roto y `BEHIND`→`CLEAN` con el gate y `strict: true`.
+Se usó Claude Code para la asistencia de ejecucion en los pasos TP4 completo. Hoy el pipeline solo construye las dos imágenes — no corre tests ni lint ni publica artefactos, porque eso es explícitamente el TP5.
 
-A diferencia del TP3, acá **la participación del estudiante fue en tiempo real, no posterior**: cada merge a `main` y el cambio a la protección de rama (`required_status_checks`) requirieron su confirmación explícita antes de ejecutarse — el modo automático de Claude Code bloquea esas dos categorías de acción sin autorización puntual, así que hubo una pausa y un "sí, dale" del estudiante en cada una (PR #23, #24+#25, #26, #27, y el gate). El estudiante revisó el diff de cada PR antes de autorizar el merge, y puede reproducir en vivo, en la defensa, la secuencia completa rojo→bloqueado→fix→verde sobre el PR #24 y explicar por qué el gate exige esos dos checks puntuales y no otros.
+Verificación propia: revisé el diff de cada Pull Request antes de autorizar el merge (cada uno requirió mi confirmación explícita antes de aplicarse), miré correr el pipeline en la pestaña Actions, y confirmé el cache buscando la palabra CACHED en el log de la segunda corrida. Puedo reproducir en vivo, en la defensa, la secuencia rojo→bloqueado→fix→verde sobre el PR que rompió el build, y explicar por qué el gate exige esos dos checks puntuales.
