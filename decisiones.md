@@ -137,6 +137,8 @@ Más la validación del modelo (`Usuario.clean`): jugador y entrenador requieren
 
 La app ya traía 16 tests en `core/tests.py` escritos cuando se reimplementó, pero **el pipeline del TP4 no los corría**. Además, casi todos pasan por HTTP y por la base (`APITestCase`): en la pirámide son de **integración**, no unitarios. Los unitarios de verdad son los 7 nuevos de `core/test_reglas.py`, que no tocan base ni red y corren en centésimas de segundo.
 
+**Frontend** (la app tiene frontend separado, así que los mínimos del front aplican): el componente `Division.jsx` decide si mostrar el botón de borrar (`sePuedeBorrar`, espejo de la regla 4 del backend) y arma el envío del comunicado (título, mensaje y foto opcional). Son las dos piezas con lógica de verdad del front; el resto es presentación. Los 12 tests de `src/lib/comunicados.test.js` corren en Node, sin DOM.
+
 ### 2. Refactor para poder mockear
 
 Las reglas de límite diario y de borrado estaban escritas **adentro de las views**, llamando directamente a `MensajeDivision.objects.filter(...).count()` y a `timezone.now()`. No había por dónde meter un doble: para testearlas había que levantar la base, crear mensajes reales y, para el borde de las 24 hs, manipular fechas con un `update()`.
@@ -147,6 +149,13 @@ Las saqué a `core/reglas.py` y las dependencias entran desde afuera:
 - `validar_borrado(mensaje, usuario, ahora)` — la hora actual es un parámetro, así el test fija "exactamente 24 hs después" sin depender del reloj.
 
 Las views quedaron como cableado (`validar_borrado(instance, self.request.user, timezone.now())`). Los 16 tests existentes, que pasan por HTTP, siguieron en verde después del refactor: el comportamiento de la API no cambió.
+
+**En el frontend, el mismo problema:** `sePuedeBorrar` llamaba adentro a `Date.now()`, y el armado del `FormData` + `api.post(...)` vivía dentro del `handleSubmit` del componente — para probarlo había que renderizar la pantalla y tener la API levantada. Lo saqué a `src/lib/comunicados.js`:
+
+- `sePuedeBorrar(mensaje, usuario, ahora = Date.now())` — la hora entra por parámetro.
+- `enviarComunicado({ titulo, mensaje, foto }, cliente)` — el cliente HTTP entra por parámetro. `Division.jsx` le pasa la instancia real de axios (`enviarComunicado({ titulo, mensaje, foto }, api)`); el test le pasa `{ post: vi.fn().mockResolvedValue(...) }` y verifica **qué le pidió** (la ruta, que el `FormData` lleve título y mensaje, y que no lleve foto si no hay).
+
+Como los unit tests no ven el cableado (si `Division.jsx` llamara mal a la función, la suite seguiría verde), lo verifiqué además en la app levantada en local: enviar un comunicado (POST `201`), ver que aparece con el botón de borrar, y borrarlo (DELETE `204`).
 
 **Mock vs stub en mi suite:** el mensaje y el usuario de `test_reglas.py` son *stubs* (`SimpleNamespace` con los atributos justos: solo devuelven datos). El contador es un *mock*: en `test_limite_diario_permite_por_debajo_del_maximo_y_consulta_por_ese_usuario` además de devolver un valor, verifico **cómo lo usaron** (`assert_called_once_with(EMISOR)`: la regla le preguntó por ese usuario, una sola vez).
 
@@ -162,15 +171,38 @@ Criterio de la consigna: si cambio la regla, algún test tiene que ponerse en ro
 
 La primera fila es el hallazgo: **con los 16 tests originales, correr el borde de `>` a `>=` pasaba en verde.** Probaban un mensaje reciente y uno de 25 hs, pero nadie miraba el borde exacto de 24 hs. El test parametrizado lo cubre explícitamente (1h, 23h59m, justo 24h, 24h+1s).
 
+**En el frontend, los tests encontraron dos bugs reales antes de mutar nada.** Escribí los tests contra `sePuedeBorrar` copiada tal cual del componente, y dos quedaron en rojo:
+
+1. **Borde de 24 hs inconsistente con el backend**: el front usaba `< 24h` (a las 24 hs exactas esconde el botón) y el backend rechaza recién con `> 24h` (a las 24 hs exactas deja borrar). La misma regla, aplicada distinto en cada lado. Alineé el front al backend (`<=`), que es la fuente de verdad.
+2. **Sin usuario y sin emisor, mostraba el botón**: `undefined?.username !== null?.username` es `undefined !== undefined` → `false`, así que el chequeo de "es tuyo" no frenaba y decidía solo por la fecha. Hoy no se da en la práctica (`ProtectedRoute` no deja entrar sin usuario), pero la función, sola, estaba mal. Se agregó `!usuario ||` al principio.
+
+Después, las mutaciones sobre el código ya corregido:
+
+| Mutación (frontend) | Tests en rojo |
+|---|---|
+| Borde: `<=` → `<` | 1 (`justo 24h`) |
+| Quitar el chequeo `!usuario \|\|` | 1 (`sin emisor y sin usuario`) |
+| Emisor: `!==` → `===` | 5 |
+| Adjuntar la foto siempre (sin el `if`) | 1 (el del mock: `has('foto')`) |
+| Ruta del POST equivocada | 1 (el del mock: verifica la ruta) |
+
+Las dos últimas solo las atrapa el test con mock: son errores en **qué se le pide a la API**, que no cambian nada de lo que la función devuelve.
+
 ### 4. Herramientas (mi stack no es el de la cátedra)
 
-El backend es **Django (Python)**, no .NET. Lo que usé para cada fila de la tabla «Tu stack, de un vistazo»:
+El backend es **Django (Python)**, no .NET; el frontend es React + Vite (JS), así que ahí sí aplica vitest como en la guía. Lo que usé para cada fila de la tabla «Tu stack, de un vistazo»:
 
-| Lo que pide la tabla | Backend (Django) |
-|---|---|
-| Dónde viven los tests | `core/tests.py` (integración, ya existían) y `core/test_reglas.py` (unitarios) |
-| Runner | `pytest` + `pytest-django` (corre también los `TestCase` de Django sin reescribirlos), configurado en `backend/pytest.ini` |
-| Test parametrizado | `@pytest.mark.parametrize` |
-| Que la dependencia entre desde afuera | parámetro de la función (`contar_mensajes_hoy`, `ahora`) |
-| Fabricar el doble | `unittest.mock.Mock` |
-| Herramientas de test fuera de la imagen de producción | `backend/requirements-dev.txt` (`-r requirements.txt` + pytest); el Dockerfile sigue instalando solo `requirements.txt` |
+| Lo que pide la tabla | Backend (Django) | Frontend (React + Vite) |
+|---|---|---|
+| Dónde viven los tests | `core/tests.py` (integración, ya existían) y `core/test_reglas.py` (unitarios) | al lado del código: `src/lib/comunicados.test.js` |
+| Runner | `pytest` + `pytest-django` (corre también los `TestCase` de Django sin reescribirlos), configurado en `backend/pytest.ini` | `vitest` 5 (`npm test`), entorno Node, sin DOM |
+| Test parametrizado | `@pytest.mark.parametrize` | `it.each` |
+| Que la dependencia entre desde afuera | parámetro de la función (`contar_mensajes_hoy`, `ahora`) | parámetro de la función (`cliente`, `ahora`) |
+| Fabricar el doble | `unittest.mock.Mock` | `vi.fn()` |
+| Herramientas de test fuera de la imagen de producción | `backend/requirements-dev.txt` (`-r requirements.txt` + pytest); el Dockerfile sigue instalando solo `requirements.txt` | `vitest` en `devDependencies`: la imagen final es nginx con los estáticos, no lleva `node_modules` |
+
+### 5. Problemas encontrados y cómo los resolví
+
+- **`npm i -D vitest` instaló la versión 3, con un `vite@7` anidado aparte del `vite@8` de la app.** Causa: mi Node local es el 23 (versión impar) y vitest 4 y 5 declaran soporte solo para Node 20/22/24+, así que npm cayó a la última que lo aceptaba. El Dockerfile (y por lo tanto el CI) usa `node:22`, donde vitest 5 es compatible, así que fijé `vitest@^5.0.2`: comparte el mismo `vite@8.2.1` de la app, sin copias.
+- **Al instalar vitest 5, npm 10 falló con `Cannot read properties of null (reading 'edgesOut')`**, un bug del resolvedor de npm 10 con las dependencias opcionales de vitest 5 — incluso partiendo de un `npm ci` limpio. Lo instalé con npm 11 (`npx npm@11 i -D vitest@^5.0.2`) y después verifiqué que el lockfile resultante lo acepte `npm ci` con npm 10 (el que trae `node:22`), porque es el que va a correr en el Docker del pipeline.
+- **El nombre del test parametrizado del front salía con los milisegundos** (`→ 86400000`): en `it.each` con arrays, cada `%s` toma el siguiente valor de la fila en orden. Reordené las columnas para que el título muestre el caso y el resultado esperado.
