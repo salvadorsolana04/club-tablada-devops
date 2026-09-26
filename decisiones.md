@@ -121,3 +121,56 @@ Porque el Dockerfile del TP2 **ya es** la definición de build de la app — es 
 Se usó Claude Code para la asistencia de ejecucion en los pasos TP4 completo. Hoy el pipeline solo construye las dos imágenes — no corre tests ni lint ni publica artefactos, porque eso es explícitamente el TP5.
 
 Verificación propia: revisé el diff de cada Pull Request antes de autorizar el merge (cada uno requirió mi confirmación explícita antes de aplicarse), miré correr el pipeline en la pestaña Actions, y confirmé el cache buscando la palabra CACHED en el log de la segunda corrida. Puedo reproducir en vivo, en la defensa, la secuencia rojo→bloqueado→fix→verde sobre el PR que rompió el build, y explicar por qué el gate exige esos dos checks puntuales.
+
+## TP5 — Calidad automatizada: tests, coverage y el umbral que frena un merge
+
+### 1. Qué lógica elegí testear y por qué ESA
+
+Donde duele un bug en esta app no es en mostrar una noticia, es en **quién puede hacer qué** y **quién ve qué**: un jugador que publica como entrenador, un comunicado de rugby M19 que le llega a hockey Primera, o alguien que borra el mensaje de otro. Por eso la suite del backend se concentra en cuatro reglas:
+
+1. **Permisos por rol** — solo `admin` publica noticias, solo `entrenador` publica comunicados; cualquiera autenticado lee, y un anónimo no.
+2. **Visibilidad por división** — cada usuario ve únicamente los comunicados de su deporte y división.
+3. **Límite diario** — un entrenador manda como máximo 3 comunicados por día.
+4. **Borrado** — solo el emisor borra su comunicado, y solo dentro de las 24 hs.
+
+Más la validación del modelo (`Usuario.clean`): jugador y entrenador requieren deporte y división; admin no (caso borde).
+
+La app ya traía 16 tests en `core/tests.py` escritos cuando se reimplementó, pero **el pipeline del TP4 no los corría**. Además, casi todos pasan por HTTP y por la base (`APITestCase`): en la pirámide son de **integración**, no unitarios. Los unitarios de verdad son los 7 nuevos de `core/test_reglas.py`, que no tocan base ni red y corren en centésimas de segundo.
+
+### 2. Refactor para poder mockear
+
+Las reglas de límite diario y de borrado estaban escritas **adentro de las views**, llamando directamente a `MensajeDivision.objects.filter(...).count()` y a `timezone.now()`. No había por dónde meter un doble: para testearlas había que levantar la base, crear mensajes reales y, para el borde de las 24 hs, manipular fechas con un `update()`.
+
+Las saqué a `core/reglas.py` y las dependencias entran desde afuera:
+
+- `validar_limite_diario(usuario, contar_mensajes_hoy)` — el contador es un parámetro. En producción la view le pasa la función real que consulta la base (`contar_mensajes_hoy` en `views.py`); en el test le paso un `Mock(return_value=3)`.
+- `validar_borrado(mensaje, usuario, ahora)` — la hora actual es un parámetro, así el test fija "exactamente 24 hs después" sin depender del reloj.
+
+Las views quedaron como cableado (`validar_borrado(instance, self.request.user, timezone.now())`). Los 16 tests existentes, que pasan por HTTP, siguieron en verde después del refactor: el comportamiento de la API no cambió.
+
+**Mock vs stub en mi suite:** el mensaje y el usuario de `test_reglas.py` son *stubs* (`SimpleNamespace` con los atributos justos: solo devuelven datos). El contador es un *mock*: en `test_limite_diario_permite_por_debajo_del_maximo_y_consulta_por_ese_usuario` además de devolver un valor, verifico **cómo lo usaron** (`assert_called_once_with(EMISOR)`: la regla le preguntó por ese usuario, una sola vez).
+
+### 3. ¿Los tests verifican algo? Invertí las reglas a propósito
+
+Criterio de la consigna: si cambio la regla, algún test tiene que ponerse en rojo. Lo comprobé mutando `reglas.py` a mano, de a un cambio por vez:
+
+| Mutación | Tests en rojo | Quién la atrapa |
+|---|---|---|
+| Borrado: `>` → `>=` | 1 | **solo** el nuevo `[justo-24h]` |
+| Límite: `>=` → `>` | 2 | uno viejo y uno nuevo |
+| Emisor: `!=` → `==` | 8 | viejos y nuevos |
+
+La primera fila es el hallazgo: **con los 16 tests originales, correr el borde de `>` a `>=` pasaba en verde.** Probaban un mensaje reciente y uno de 25 hs, pero nadie miraba el borde exacto de 24 hs. El test parametrizado lo cubre explícitamente (1h, 23h59m, justo 24h, 24h+1s).
+
+### 4. Herramientas (mi stack no es el de la cátedra)
+
+El backend es **Django (Python)**, no .NET. Lo que usé para cada fila de la tabla «Tu stack, de un vistazo»:
+
+| Lo que pide la tabla | Backend (Django) |
+|---|---|
+| Dónde viven los tests | `core/tests.py` (integración, ya existían) y `core/test_reglas.py` (unitarios) |
+| Runner | `pytest` + `pytest-django` (corre también los `TestCase` de Django sin reescribirlos), configurado en `backend/pytest.ini` |
+| Test parametrizado | `@pytest.mark.parametrize` |
+| Que la dependencia entre desde afuera | parámetro de la función (`contar_mensajes_hoy`, `ahora`) |
+| Fabricar el doble | `unittest.mock.Mock` |
+| Herramientas de test fuera de la imagen de producción | `backend/requirements-dev.txt` (`-r requirements.txt` + pytest); el Dockerfile sigue instalando solo `requirements.txt` |
