@@ -201,8 +201,37 @@ El backend es **Django (Python)**, no .NET; el frontend es React + Vite (JS), as
 | Fabricar el doble | `unittest.mock.Mock` | `vi.fn()` |
 | Herramientas de test fuera de la imagen de producción | `backend/requirements-dev.txt` (`-r requirements.txt` + pytest); el Dockerfile sigue instalando solo `requirements.txt` | `vitest` en `devDependencies`: la imagen final es nginx con los estáticos, no lleva `node_modules` |
 
-### 5. Problemas encontrados y cómo los resolví
+### 5. Cobertura: qué entra en la cuenta y el umbral
+
+**Qué dejé afuera de la cuenta, y por qué.** En los dos lados se **excluye** (y no se incluye) lo que no es lógica mía, para que un archivo nuevo entre a la cuenta solo: si mañana alguien agrega `core/algo.py` sin tests, el número baja y el gate avisa. Lo verifiqué agregando un archivo temporal sin tests de cada lado: los dos entraron a la medición y los dos frenaron.
+
+- **Backend** (`backend/.coveragerc`, `omit`):
+  - **el arranque**: `config/*` (settings, rutas raíz, wsgi/asgi) y `manage.py`;
+  - **lo generado**: `*/migrations/*`, que escribe `makemigrations`;
+  - **los tests**, que no se miden a sí mismos;
+  - **lo declarativo sin reglas**: `admin.py` (registro en el admin), `apps.py` (AppConfig), `core/urls.py` (rutas) y `serializers.py` (mapeo de campos, el equivalente a los DTOs). `models.py` **queda adentro** porque tiene una regla (`Usuario.clean`).
+- **Frontend** (`vite.config.js`, `include: ['src/lib/**']`): entra la lógica extraída; los componentes React (presentación) quedan afuera — la UI se verifica end-to-end en el TP7. Con `include`, todo archivo de `src/lib` cuenta aunque ningún test lo importe.
+
+**En Django, medir todo *infla* el número en vez de hundirlo.** Sin exclusiones daba 92 %, pero porque `settings.py`, las migraciones, `admin.py` y `urls.py` se ejecutan solos al arrancar Django y salen al 100 % sin que ningún test los verifique (el caso inverso al ejemplo .NET de la guía, donde el arranque sin tests arrastraba el número al 30 %). Con las exclusiones mide 4 archivos con lógica: `models`, `permissions`, `reglas` y `views`.
+
+**Los números de hoy** (medidos con la suite de la Tarea 1 completa):
+
+| | Líneas | Ramas | Umbral |
+|---|---|---|---|
+| Backend | 95,19 % (99/104) | **92,86 % (13/14)** | 90 sobre líneas + ramas juntas (hoy 94,92 %, 112/118) |
+| Frontend | 100 % (8/8) | **100 % (7/7)** | 90 en líneas y 90 en ramas |
+
+**Por qué 90 en el backend, y sobre qué métrica.** Con `branch = True`, el `fail_under` de coverage.py no mira las líneas solas: evalúa `(líneas cubiertas + ramas cubiertas) / (líneas + ramas)`. O sea, el umbral ya incluye las ramas, que es la métrica más honesta; en el Summary igual muestro líneas y ramas por separado. Hoy mido 94,92 %: el 90 deja ~5 puntos de margen para el día a día, pero una función nueva sin tests de unas 7 líneas/ramas ya lo pone en rojo (lo probé: una función de 8 líneas y 6 ramas sin tests lo bajó a 84,85 % y frenó). Un umbral pegado a la medición (94) frenaría por cualquier cambio mínimo; uno lejano (70) dejaría entrar funciones enteras sin tests.
+
+**Por qué 90 en el frontend, y qué mide de verdad.** El 100 % es real pero chico: mide **un solo archivo** (`comunicados.js`, 8 líneas y 7 ramas). Con una base tan chica, cualquier archivo nuevo en `src/lib` sin tests lo hunde (lo probé: uno de 5 líneas lo bajó a 66,66 % de líneas y 53,84 % de ramas). **Lo que no mide**: en `src/api/axios.js` queda lógica sin testear — el interceptor que ante un 401 borra los tokens y redirige a `/login`. Si incluyo `src/api/**`, el front baja a 34,78 % de líneas y 46,66 % de ramas. **Para ampliar la medición** habría que sacar esa lógica a `src/lib` recibiendo `localStorage` y `window.location` por parámetro (el mismo refactor que `enviarComunicado`), testearla con dobles, e incluirla. Lo dejé documentado en vez de esconderlo: el 100 % del front dice "la lógica extraída está verificada", no "el front está verificado".
+
+**Cómo frena.** La cobertura corre **adentro de los mismos jobs** del TP4 (`build-backend` y `build-frontend`), que ya son required checks de `main`: una etapa `test` en cada Dockerfile (`FROM build AS test`) que el job construye y corre. Si el número no llega, pytest/vitest salen con error → el `docker run` también → el job queda rojo → el merge se bloquea. La etapa `final` de cada imagen no se lleva nada de test: el backend copia el venv desde `build` (no desde `test`), y el frontend sigue siendo nginx con los estáticos.
+
+### 6. Problemas encontrados y cómo los resolví
 
 - **`npm i -D vitest` instaló la versión 3, con un `vite@7` anidado aparte del `vite@8` de la app.** Causa: mi Node local es el 23 (versión impar) y vitest 4 y 5 declaran soporte solo para Node 20/22/24+, así que npm cayó a la última que lo aceptaba. El Dockerfile (y por lo tanto el CI) usa `node:22`, donde vitest 5 es compatible, así que fijé `vitest@^5.0.2`: comparte el mismo `vite@8.2.1` de la app, sin copias.
 - **Al instalar vitest 5, npm 10 falló con `Cannot read properties of null (reading 'edgesOut')`**, un bug del resolvedor de npm 10 con las dependencias opcionales de vitest 5 — incluso partiendo de un `npm ci` limpio. Lo instalé con npm 11 (`npx npm@11 i -D vitest@^5.0.2`) y después verifiqué que el lockfile resultante lo acepte `npm ci` con npm 10 (el que trae `node:22`), porque es el que va a correr en el Docker del pipeline.
 - **El nombre del test parametrizado del front salía con los milisegundos** (`→ 86400000`): en `it.each` con arrays, cada `%s` toma el siguiente valor de la fila en orden. Reordené las columnas para que el título muestre el caso y el resultado esperado.
+- **El `.dockerignore` del backend no terminaba en salto de línea**: al agregarle las carpetas de reportes de cobertura, la primera línea nueva quedó pegada a `staticfiles/` (`staticfiles/# reportes…`), y esa exclusión dejaba de funcionar sin ningún error. Es la misma trampa del `requirements.txt` del TP4; lo detecté revisando el archivo con `cat -e` y lo corregí.
+- **`@vitest/coverage-v8` tiene que ser la misma versión que `vitest`** (5.0.2 los dos); lo instalé con el número exacto y lo comprobé con `npm ls vitest @vitest/coverage-v8`.
+- **La tabla de cobertura de vitest 5 salía vacía**: el reporter `text` esconde por default los archivos al 100 %. Le puse `skipFull: false` para que el log del pipeline liste qué archivos se midieron — si no, un `include` que no matchea nada y uno que mide todo al 100 % se ven igual.

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "vitest",
+    "test:ci": "vitest run --coverage --coverage.reportsDirectory=${COVERAGE_DIR:-coverage}",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "@vitest/coverage-v8": "^5.0.2",
     "autoprefixer": "^10.5.4",
     "oxlint": "^1.75.0",
     "postcss": "^8.5.26",
