@@ -98,6 +98,17 @@ class MensajeDivisionPermisosTests(APITestCase):
             self.mensaje_rugby_m19.id, [m['id'] for m in response.data]
         )
 
+    def test_usuario_sin_deporte_ni_division_recibe_lista_vacia(self):
+        # Camino que ningún test recorría (views.py, get_queryset): un admin no tiene
+        # deporte ni división, así que "Mi División" le devuelve una lista vacía, no un error.
+        admin = Usuario.objects.create_user(
+            username='admin_sin_division', password='pass12345', rol=Usuario.Rol.ADMIN
+        )
+        self.client.force_authenticate(admin)
+        response = self.client.get(reverse('mensajes_division'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
     def test_jugador_no_puede_publicar_mensaje(self):
         self.client.force_authenticate(self.jugador_rugby_m19)
         response = self.client.post(
