@@ -3,8 +3,7 @@ import { useEffect, useState } from 'react'
 import api from '../api/axios'
 import logo from '../assets/logo-tablada.png'
 import { useAuth } from '../context/AuthContext'
-
-const VENTANA_BORRADO_MS = 24 * 60 * 60 * 1000
+import { enviarComunicado, sePuedeBorrar } from '../lib/comunicados'
 
 function formatFecha(iso) {
   return new Date(iso).toLocaleString('es-AR', {
@@ -13,11 +12,6 @@ function formatFecha(iso) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function sePuedeBorrar(mensaje, usuario) {
-  if (mensaje.emisor?.username !== usuario?.username) return false
-  return Date.now() - new Date(mensaje.fecha).getTime() < VENTANA_BORRADO_MS
 }
 
 export default function Division() {
@@ -63,11 +57,7 @@ export default function Division() {
     setError('')
     setEnviando(true)
     try {
-      const formData = new FormData()
-      formData.append('titulo', titulo)
-      formData.append('mensaje', mensaje)
-      if (foto) formData.append('foto', foto)
-      await api.post('/divisiones/mensajes/', formData)
+      await enviarComunicado({ titulo, mensaje, foto }, api)
       setTitulo('')
       setMensaje('')
       quitarFoto()
