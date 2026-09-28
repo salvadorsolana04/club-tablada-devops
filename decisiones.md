@@ -137,7 +137,7 @@ Más la validación del modelo (`Usuario.clean`): jugador y entrenador requieren
 
 La app ya traía 16 tests en `core/tests.py` escritos cuando se reimplementó, pero **el pipeline del TP4 no los corría**. Además, casi todos pasan por HTTP y por la base (`APITestCase`): en la pirámide son de **integración**, no unitarios. Los unitarios de verdad son los 7 nuevos de `core/test_reglas.py`, que no tocan base ni red y corren en centésimas de segundo.
 
-**Frontend** (la app tiene frontend separado, así que los mínimos del front aplican): el componente `Division.jsx` decide si mostrar el botón de borrar (`sePuedeBorrar`, espejo de la regla 4 del backend) y arma el envío del comunicado (título, mensaje y foto opcional). Son las dos piezas con lógica de verdad del front; el resto es presentación. Los 12 tests de `src/lib/comunicados.test.js` corren en Node, sin DOM.
+**Frontend** (la app tiene frontend separado, así que los mínimos del front aplican): el componente `Division.jsx` decide si mostrar el botón de borrar (`sePuedeBorrar`, espejo de la regla 4 del backend) y arma el envío del comunicado (título, mensaje y foto opcional). Son las dos piezas con lógica de verdad del front; el resto es presentación. Los 12 tests de `src/lib/comunicados.test.js` corren en Node, sin DOM (17 después de la demo del §8, que sumó `tiempoParaBorrar` con sus 5 tests).
 
 ### 2. Refactor para poder mockear
 
@@ -224,7 +224,8 @@ El backend es **Django (Python)**, no .NET; el frontend es React + Vite (JS), as
 |---|---|---|---|---|
 | Backend, suite de la Tarea 1 | 95,19 % (99/104) | **92,86 % (13/14)** | 94,92 % (112/118) | 90 sobre líneas + ramas juntas |
 | Backend, **hoy** (con el test del camino sin cubrir, §7) | 96,15 % (100/104) | **100 % (14/14)** | 96,61 % (114/118) | ídem |
-| Frontend | 100 % (8/8) | **100 % (7/7)** | — | 90 en líneas y 90 en ramas |
+| Frontend, suite de la Tarea 1 | 100 % (8/8) | **100 % (7/7)** | — | 90 en líneas y 90 en ramas |
+| Frontend, **hoy** (con `tiempoParaBorrar` y sus tests, §8) | 100 % (19/19) | **100 % (16/16)** | — | ídem |
 
 Lo que sigue sin cubrir en el backend son los `__str__` de los tres modelos y `PerfilView.get` (`/perfil/`): líneas sin decisiones adentro, que no suman ramas.
 
@@ -278,7 +279,7 @@ Los dos primeros sobreviven porque, sin la guarda, la query queda `filter(deport
 - **Por qué**: compilaba, el build de la imagen pasaba y **los 12 tests pasaban todos**. Pero la función nueva sumó 11 líneas y 9 ramas que ningún test recorría: `src/lib` pasó de 8/8 líneas y 7/7 ramas a 10/19 y 7/16. El número que elegí en §5 lo frenó.
 - **Qué escribí para arreglarlo**: 5 tests, **uno por cada camino** que declara la función — fecha inválida (`null`), ventana vencida (`null`), "quedan N h", "quedan N min" y "queda menos de un minuto" (que incluye el borde exacto de 24 hs, coherente con `sePuedeBorrar`). `ahora` entra por parámetro, así los tests no dependen del reloj. Con eso volvió a 100 % / 100 %, el check pasó a verde (https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36450612220) y se mergeó. La conversación del PR muestra la secuencia entera: el commit sin tests con su check rojo, el commit de los tests con su check verde, y el merge.
 
-**El freno vigente, en rojo (queda abierto hasta la defensa)**: PENDIENTE_TESTIGO
+**El freno vigente, en rojo (queda abierto hasta la defensa)**: https://github.com/salvadorsolana04/club-tablada-devops/pull/33 — «Valida qué divisiones corresponden a cada deporte». Un solo archivo, `backend/core/divisiones.py` (`validar_division`: 9 líneas y 6 ramas), **sin tests y sin arreglar**. Compila y los 23 tests pasan, pero la cobertura del backend cae a 84,21 % contra el umbral de 90 (`FAIL Required test coverage of 90.0% not reached. Total coverage: 84.21%`, en la corrida https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36451014210): `build-backend` queda en rojo. Frena el **backend**, y el #32 frenó el **frontend**: los dos umbrales quedan demostrados en un Pull Request real.
 
 **Por qué este freno es distinto del del TP4.** El del TP4 frenaba cuando el código **no construía** (una dependencia inexistente: la máquina diciendo "esto no anda"). Este frena código que **anda**: compila, construye y pasa todos sus tests. Lo que lo frena es un criterio de calidad que elegí yo — el umbral —, no un error.
 
