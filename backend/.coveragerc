@@ -1,0 +1,28 @@
+# Qué entra en la cuenta de cobertura: todo el backend MENOS lo que sigue.
+# Se excluye (omit) en vez de incluir, para que un archivo nuevo entre solo a la cuenta.
+[run]
+branch = True
+source = .
+omit =
+    # el entorno virtual: código de terceros
+    .venv/*
+    # el arranque: settings, rutas raíz, wsgi/asgi y el manage.py
+    manage.py
+    config/*
+    # lo generado: migraciones que escribe makemigrations
+    */migrations/*
+    # los tests no se miden a sí mismos
+    core/tests.py
+    core/test_*.py
+    # declarativo, sin reglas: registro en el admin, AppConfig, rutas de la app y mapeo de campos (serializers)
+    core/admin.py
+    core/apps.py
+    core/urls.py
+    core/serializers.py
+
+[report]
+show_missing = True
+skip_empty = True
+# Umbral que rompe el build. Con branch = True, coverage.py lo evalúa sobre líneas y ramas
+# juntas: (líneas cubiertas + ramas cubiertas) / (líneas + ramas). Justificado en decisiones.md.
+fail_under = 90

@@ -8,11 +8,17 @@ backend/.env
 backend/media/
 backend/staticfiles/
 *.pyc
+# reportes de cobertura (se generan en cada corrida)
+backend/.coverage
+backend/htmlcov/
+backend/coverage.xml
+backend/.pytest_cache/
 
 # Frontend (Node / Vite)
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+frontend/coverage/
 
 # Claude Code local settings
 .claude/settings.local.json
