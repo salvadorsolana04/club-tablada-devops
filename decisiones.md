@@ -137,7 +137,7 @@ Más la validación del modelo (`Usuario.clean`): jugador y entrenador requieren
 
 La app ya traía 16 tests en `core/tests.py` escritos cuando se reimplementó, pero **el pipeline del TP4 no los corría**. Además, casi todos pasan por HTTP y por la base (`APITestCase`): en la pirámide son de **integración**, no unitarios. Los unitarios de verdad son los 7 nuevos de `core/test_reglas.py`, que no tocan base ni red y corren en centésimas de segundo.
 
-**Frontend** (la app tiene frontend separado, así que los mínimos del front aplican): el componente `Division.jsx` decide si mostrar el botón de borrar (`sePuedeBorrar`, espejo de la regla 4 del backend) y arma el envío del comunicado (título, mensaje y foto opcional). Son las dos piezas con lógica de verdad del front; el resto es presentación. Los 12 tests de `src/lib/comunicados.test.js` corren en Node, sin DOM.
+**Frontend** (la app tiene frontend separado, así que los mínimos del front aplican): el componente `Division.jsx` decide si mostrar el botón de borrar (`sePuedeBorrar`, espejo de la regla 4 del backend) y arma el envío del comunicado (título, mensaje y foto opcional). Son las dos piezas con lógica de verdad del front; el resto es presentación. Los 12 tests de `src/lib/comunicados.test.js` corren en Node, sin DOM (17 después de la demo del §8, que sumó `tiempoParaBorrar` con sus 5 tests).
 
 ### 2. Refactor para poder mockear
 
@@ -199,7 +199,11 @@ El backend es **Django (Python)**, no .NET; el frontend es React + Vite (JS), as
 | Test parametrizado | `@pytest.mark.parametrize` | `it.each` |
 | Que la dependencia entre desde afuera | parámetro de la función (`contar_mensajes_hoy`, `ahora`) | parámetro de la función (`cliente`, `ahora`) |
 | Fabricar el doble | `unittest.mock.Mock` | `vi.fn()` |
-| Herramientas de test fuera de la imagen de producción | `backend/requirements-dev.txt` (`-r requirements.txt` + pytest); el Dockerfile sigue instalando solo `requirements.txt` | `vitest` en `devDependencies`: la imagen final es nginx con los estáticos, no lleva `node_modules` |
+| Medir la cobertura | `pytest-cov` (coverage.py) con `branch = True` | `@vitest/coverage-v8` (5.0.2, la misma versión que vitest) |
+| 🔴 Un umbral que ROMPE el build | `fail_under = 90` en `backend/.coveragerc` (pytest sale con error) | `coverage.thresholds: { lines: 90, branches: 90 }` en `vite.config.js` |
+| 🔴 Qué ENTRA en la cuenta | `omit =` en `backend/.coveragerc` (se excluye; lo nuevo entra solo) | `include: ['src/lib/**']` en `vite.config.js` |
+| Reporte legible | `--cov-report=html` + `json` (el pipeline arma la tabla del Summary desde el JSON) | reporters `html`, `lcov` y `json-summary` (el Summary sale de `coverage-summary.json`) |
+| 🔴 Que las herramientas de test ENTREN a la etapa de tests | la etapa `test` instala `requirements-dev.txt`; `final` copia el venv desde `build`, así pytest no llega a producción | `npm ci` sin `--omit=dev` en `build`; la imagen final es nginx con los estáticos, no lleva `node_modules` |
 
 ### 5. Cobertura: qué entra en la cuenta y el umbral
 
@@ -214,20 +218,78 @@ El backend es **Django (Python)**, no .NET; el frontend es React + Vite (JS), as
 
 **En Django, medir todo *infla* el número en vez de hundirlo.** Sin exclusiones daba 92 %, pero porque `settings.py`, las migraciones, `admin.py` y `urls.py` se ejecutan solos al arrancar Django y salen al 100 % sin que ningún test los verifique (el caso inverso al ejemplo .NET de la guía, donde el arranque sin tests arrastraba el número al 30 %). Con las exclusiones mide 4 archivos con lógica: `models`, `permissions`, `reglas` y `views`.
 
-**Los números de hoy** (medidos con la suite de la Tarea 1 completa):
+**Los números** (el umbral lo elegí sobre la primera fila de cada lado):
 
-| | Líneas | Ramas | Umbral |
-|---|---|---|---|
-| Backend | 95,19 % (99/104) | **92,86 % (13/14)** | 90 sobre líneas + ramas juntas (hoy 94,92 %, 112/118) |
-| Frontend | 100 % (8/8) | **100 % (7/7)** | 90 en líneas y 90 en ramas |
+| | Líneas | Ramas | Líneas + ramas | Umbral |
+|---|---|---|---|---|
+| Backend, suite de la Tarea 1 | 95,19 % (99/104) | **92,86 % (13/14)** | 94,92 % (112/118) | 90 sobre líneas + ramas juntas |
+| Backend, **hoy** (con el test del camino sin cubrir, §7) | 96,15 % (100/104) | **100 % (14/14)** | 96,61 % (114/118) | ídem |
+| Frontend, suite de la Tarea 1 | 100 % (8/8) | **100 % (7/7)** | — | 90 en líneas y 90 en ramas |
+| Frontend, **hoy** (con `tiempoParaBorrar` y sus tests, §8) | 100 % (19/19) | **100 % (16/16)** | — | ídem |
 
-**Por qué 90 en el backend, y sobre qué métrica.** Con `branch = True`, el `fail_under` de coverage.py no mira las líneas solas: evalúa `(líneas cubiertas + ramas cubiertas) / (líneas + ramas)`. O sea, el umbral ya incluye las ramas, que es la métrica más honesta; en el Summary igual muestro líneas y ramas por separado. Hoy mido 94,92 %: el 90 deja ~5 puntos de margen para el día a día, pero una función nueva sin tests de unas 7 líneas/ramas ya lo pone en rojo (lo probé: una función de 8 líneas y 6 ramas sin tests lo bajó a 84,85 % y frenó). Un umbral pegado a la medición (94) frenaría por cualquier cambio mínimo; uno lejano (70) dejaría entrar funciones enteras sin tests.
+Lo que sigue sin cubrir en el backend son los `__str__` de los tres modelos y `PerfilView.get` (`/perfil/`): líneas sin decisiones adentro, que no suman ramas.
+
+**Por qué 90 en el backend, y sobre qué métrica.** Con `branch = True`, el `fail_under` de coverage.py no mira las líneas solas: evalúa `(líneas cubiertas + ramas cubiertas) / (líneas + ramas)`. O sea, el umbral ya incluye las ramas, que es la métrica más honesta; en el Summary igual muestro líneas y ramas por separado. Cuando lo elegí medía 94,92 %: el 90 deja ~5 puntos de margen para el día a día, pero una función nueva sin tests de unas 7 líneas/ramas ya lo pone en rojo (lo probé: una función de 8 líneas y 6 ramas sin tests lo bajó a 84,85 % y frenó). Un umbral pegado a la medición (94) frenaría por cualquier cambio mínimo; uno lejano (70) dejaría entrar funciones enteras sin tests. **Para subirlo** a 95 sin que quede pegado habría que testear `/perfil/` y los `__str__`, y aun así sería un umbral que frena por dos líneas: con una base de 118 unidades, cada punto son ~1,2 líneas o ramas.
 
 **Por qué 90 en el frontend, y qué mide de verdad.** El 100 % es real pero chico: mide **un solo archivo** (`comunicados.js`, 8 líneas y 7 ramas). Con una base tan chica, cualquier archivo nuevo en `src/lib` sin tests lo hunde (lo probé: uno de 5 líneas lo bajó a 66,66 % de líneas y 53,84 % de ramas). **Lo que no mide**: en `src/api/axios.js` queda lógica sin testear — el interceptor que ante un 401 borra los tokens y redirige a `/login`. Si incluyo `src/api/**`, el front baja a 34,78 % de líneas y 46,66 % de ramas. **Para ampliar la medición** habría que sacar esa lógica a `src/lib` recibiendo `localStorage` y `window.location` por parámetro (el mismo refactor que `enviarComunicado`), testearla con dobles, e incluirla. Lo dejé documentado en vez de esconderlo: el 100 % del front dice "la lógica extraída está verificada", no "el front está verificado".
 
 **Cómo frena.** La cobertura corre **adentro de los mismos jobs** del TP4 (`build-backend` y `build-frontend`), que ya son required checks de `main`: una etapa `test` en cada Dockerfile (`FROM build AS test`) que el job construye y corre. Si el número no llega, pytest/vitest salen con error → el `docker run` también → el job queda rojo → el merge se bloquea. La etapa `final` de cada imagen no se lleva nada de test: el backend copia el venv desde `build` (no desde `test`), y el frontend sigue siendo nginx con los estáticos.
 
-### 6. Problemas encontrados y cómo los resolví
+**Dónde verlo** — el resumen de cobertura (Summary de la corrida, tablas de backend y frontend) y los reportes descargables (artefactos `coverage-backend` y `coverage-frontend`, con el HTML navegable, el JSON y el resultado de los tests): la corrida verde del PR de las Tareas 1 y 2, https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36255877311 ([PR #31](https://github.com/salvadorsolana04/club-tablada-devops/pull/31)).
+
+### 6. Por qué coverage alto no garantiza calidad (mi ejemplo)
+
+**Con solo los 16 tests que traía la app, `core/reglas.py` da 100 % de líneas y 100 % de ramas (6/6)** — la regla de borrado tiene un test con un mensaje reciente (rama "se puede") y otro con uno de 25 hs (rama "vencido"). Y sin embargo, si cambio `ahora - mensaje.fecha > VENTANA_BORRADO` por `>=`, **los 16 siguen en verde y la cobertura sigue en 100 %**: nadie prueba el borde exacto de 24 hs. Lo medí: el total del backend da exactamente lo mismo (95 %) con y sin mis 7 tests nuevos de `test_reglas.py`. Esos 7 **no suman ni un punto de cobertura**, y son los únicos que atrapan ese mutante (el `[justo-24h]` del parametrizado).
+
+La cobertura mide que la línea **se ejecutó**, no que alguien **verificó** lo que hace en el caso que importa. Un 100 % dice "no hay código que ningún test toque"; no dice "no hay comportamiento que ningún test compruebe". Por eso la cobertura baja es una señal confiable (hay agujeros), y la alta no lo es.
+
+El mismo efecto, del otro lado: en Django, medir todo sin exclusiones daba 92 % porque la configuración y las migraciones se ejecutan solas al arrancar (§5). Cobertura sin un solo assert.
+
+### 7. El ejercicio del camino sin cubrir
+
+- **Qué línea es**: `backend/core/views.py`, en `MensajeDivisionListCreateView.get_queryset`, el `return MensajeDivision.objects.none()` del `if not usuario.deporte or not usuario.division:`. El reporte de coverage la marcaba como línea sin cubrir y la rama del `if` como parcial (13 de 14 ramas).
+- **Qué entrada la recorre**: un usuario autenticado **sin deporte ni división** — por ejemplo un admin (`admin_demo`, rol `admin`, deporte y división vacíos) — que hace `GET /api/v1/divisiones/mensajes/` (entrar a "Mi División").
+- **Qué decidí**: **agregué el test** (`test_usuario_sin_deporte_ni_division_recibe_lista_vacia`, en `core/tests.py`): un admin recibe `200` y una lista vacía, no un error ni los comunicados de otros. Las ramas del backend pasaron de 13/14 a 14/14.
+
+**Lo que encontré al mutar esa guarda**, y es lo más interesante del ejercicio:
+
+| Mutante en la guarda | Resultado |
+|---|---|
+| `or` → `and` | sobrevive |
+| sacar la guarda (siempre filtra) | sobrevive |
+| devolver **todos** los mensajes en vez de ninguno | **muere**: el test nuevo se pone rojo |
+
+Los dos primeros sobreviven porque, sin la guarda, la query queda `filter(deporte=None, division=None)`, y como en `MensajeDivision` deporte y división son obligatorios, también devuelve vacío. **La guarda no es una regla: es una optimización** (evita ir a la base). El test protege el comportamiento que importa —que un usuario sin división no vea comunicados ajenos—, que es lo que rompería un bug de verdad (el tercer mutante). Podría verificar también la optimización (con `assertNumQueries`), pero eso sería testear cómo está implementado, no qué hace.
+
+### 8. El umbral bloqueando un merge
+
+**El Pull Request bloqueado (y después mergeado)**: https://github.com/salvadorsolana04/club-tablada-devops/pull/32 — «Muestra cuánto le queda al emisor para borrar un comunicado». Agrega `tiempoParaBorrar` en `src/lib/comunicados.js` (cuánto le queda al emisor para borrar su comunicado: "quedan 3 h", "quedan 12 min"…) y la usa en el tooltip del botón de borrar. Lo subí **a propósito sin tests**.
+
+- **Qué check se puso en rojo**: `build-frontend` (required), en el paso *Correr los tests del frontend con coverage*. `build-backend` quedó verde: el cambio no tocaba el backend. Con uno solo en rojo, el merge ya quedó bloqueado.
+- **En qué métrica**: en las **dos**. El log de la corrida roja (https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36450348241) dice:
+
+  ```
+  RUN  v5.0.2 /app
+        Tests  12 passed (12)
+  ERROR: Coverage for lines (52.63%) does not meet global threshold (90%)
+  ERROR: Coverage for branches (43.75%) does not meet global threshold (90%)
+  ```
+
+  Con vitest 5 las ramas de una función que ningún test llama **cuentan desde el principio**, por eso cae también en ramas (en vitest 3 habría frenado solo por líneas).
+- **Por qué**: compilaba, el build de la imagen pasaba y **los 12 tests pasaban todos**. Pero la función nueva sumó 11 líneas y 9 ramas que ningún test recorría: `src/lib` pasó de 8/8 líneas y 7/7 ramas a 10/19 y 7/16. El número que elegí en §5 lo frenó.
+- **Qué escribí para arreglarlo**: 5 tests, **uno por cada camino** que declara la función — fecha inválida (`null`), ventana vencida (`null`), "quedan N h", "quedan N min" y "queda menos de un minuto" (que incluye el borde exacto de 24 hs, coherente con `sePuedeBorrar`). `ahora` entra por parámetro, así los tests no dependen del reloj. Con eso volvió a 100 % / 100 %, el check pasó a verde (https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36450612220) y se mergeó. La conversación del PR muestra la secuencia entera: el commit sin tests con su check rojo, el commit de los tests con su check verde, y el merge.
+
+**El freno vigente, en rojo (queda abierto hasta la defensa)**: https://github.com/salvadorsolana04/club-tablada-devops/pull/33 — «Valida qué divisiones corresponden a cada deporte». Un solo archivo, `backend/core/divisiones.py` (`validar_division`: 9 líneas y 6 ramas), **sin tests y sin arreglar**. Compila y los 23 tests pasan, pero la cobertura del backend cae a 84,21 % contra el umbral de 90 (`FAIL Required test coverage of 90.0% not reached. Total coverage: 84.21%`, en la corrida https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36451014210): `build-backend` queda en rojo. Frena el **backend**, y el #32 frenó el **frontend**: los dos umbrales quedan demostrados en un Pull Request real.
+
+**Por qué este freno es distinto del del TP4.** El del TP4 frenaba cuando el código **no construía** (una dependencia inexistente: la máquina diciendo "esto no anda"). Este frena código que **anda**: compila, construye y pasa todos sus tests. Lo que lo frena es un criterio de calidad que elegí yo — el umbral —, no un error.
+
+**Qué clase de error deja pasar igual:**
+- **Tests que ejecutan sin verificar**: la cobertura cuenta ejecución, no asserts (§6). Cinco tests sin un solo `expect` que llamaran a `tiempoParaBorrar` con las mismas cinco entradas habrían dejado el check igual de verde.
+- **Lo que está fuera de la cuenta**: un bug en un componente React, en el interceptor de `api/axios.js` o en `admin.py` no mueve ningún número.
+- **Errores de integración**: si el backend cambia el formato de un comunicado, el test con mock sigue verde porque el doble contesta lo de siempre. Eso se verifica end-to-end (TP7).
+- **Código nuevo chico en el backend**: con el umbral en 90 y la medición en 96,61 %, una función nueva de menos de ~9 líneas/ramas sin tests todavía pasa.
+
+### 9. Problemas encontrados y cómo los resolví
 
 - **`npm i -D vitest` instaló la versión 3, con un `vite@7` anidado aparte del `vite@8` de la app.** Causa: mi Node local es el 23 (versión impar) y vitest 4 y 5 declaran soporte solo para Node 20/22/24+, así que npm cayó a la última que lo aceptaba. El Dockerfile (y por lo tanto el CI) usa `node:22`, donde vitest 5 es compatible, así que fijé `vitest@^5.0.2`: comparte el mismo `vite@8.2.1` de la app, sin copias.
 - **Al instalar vitest 5, npm 10 falló con `Cannot read properties of null (reading 'edgesOut')`**, un bug del resolvedor de npm 10 con las dependencias opcionales de vitest 5 — incluso partiendo de un `npm ci` limpio. Lo instalé con npm 11 (`npx npm@11 i -D vitest@^5.0.2`) y después verifiqué que el lockfile resultante lo acepte `npm ci` con npm 10 (el que trae `node:22`), porque es el que va a correr en el Docker del pipeline.
