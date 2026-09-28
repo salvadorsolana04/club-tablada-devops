@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import api from '../api/axios'
 import logo from '../assets/logo-tablada.png'
 import { useAuth } from '../context/AuthContext'
-import { enviarComunicado, sePuedeBorrar } from '../lib/comunicados'
+import { enviarComunicado, sePuedeBorrar, tiempoParaBorrar } from '../lib/comunicados'
 
 function formatFecha(iso) {
   return new Date(iso).toLocaleString('es-AR', {
@@ -210,7 +210,7 @@ export default function Division() {
                     <button
                       onClick={() => handleDelete(m.id)}
                       disabled={borrandoId === m.id}
-                      title="Borrar comunicado"
+                      title={`Borrar comunicado (${tiempoParaBorrar(m)})`}
                       className="flex-none text-slate-400 transition hover:text-red-600 disabled:opacity-50"
                     >
                       <Trash2 size={14} strokeWidth={2.2} />
