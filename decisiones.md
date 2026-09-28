@@ -297,3 +297,17 @@ Los dos primeros sobreviven porque, sin la guarda, la query queda `filter(deport
 - **El `.dockerignore` del backend no terminaba en salto de línea**: al agregarle las carpetas de reportes de cobertura, la primera línea nueva quedó pegada a `staticfiles/` (`staticfiles/# reportes…`), y esa exclusión dejaba de funcionar sin ningún error. Es la misma trampa del `requirements.txt` del TP4; lo detecté revisando el archivo con `cat -e` y lo corregí.
 - **`@vitest/coverage-v8` tiene que ser la misma versión que `vitest`** (5.0.2 los dos); lo instalé con el número exacto y lo comprobé con `npm ls vitest @vitest/coverage-v8`.
 - **La tabla de cobertura de vitest 5 salía vacía**: el reporter `text` esconde por default los archivos al 100 %. Le puse `skipFull: false` para que el log del pipeline liste qué archivos se midieron — si no, un `include` que no matchea nada y uno que mide todo al 100 % se ven igual.
+
+
+### 10. Declaración de uso de IA (TP5)
+
+Se utilizó **Claude Code** (Anthropic) como herramienta asistente y copiloto técnico durante el diseño de la suite de pruebas, la refactorización para testeabilidad y la configuración de los gates de cobertura:
+
+- **Refactorización y diseño de pruebas**: asistencia en la extracción de dependencias acopladas en `core/reglas.py` y `src/lib/comunicados.js` (inyección de funciones contadoras, fechas y clientes HTTP), facilitando la escritura de pruebas unitarias puras con dobles de prueba (`unittest.mock.Mock` en Python y `vi.fn()` en Vitest).
+- **Configuración de herramientas y runners de cobertura**: soporte en la sintaxis de configuración para medir ramas y líneas (`backend/.coveragerc` con `branch = True` y `fail_under = 90`, y `vite.config.js` con `@vitest/coverage-v8`), así como en la estructuración de la etapa `test` dentro de los Dockerfiles multi-stage para que las dependencias de desarrollo no viajen a la imagen final.
+- **Resolución de conflictos de tooling**: asistencia en el diagnóstico del error de dependencias de npm 10 al instalar Vitest 5 y en el formateo de los reportes JSON para alimentar el Summary de GitHub Actions.
+
+**Verificación propia**:
+- Revisé cada cambio antes de pasar al siguiente paso y leí los logs de cada corrida roja y verde en Actions.
+- Hallazgos que la IA reportó y comprobé en el código: con los 16 tests originales el borde `>` → `>=` de la regla de borrado pasaba en verde con `reglas.py` al 100 % de cobertura; los tests del front encontraron dos bugs reales en `sePuedeBorrar`; y en `views.py` la guarda del usuario sin división es una optimización, no una regla (dos mutantes sobreviven).
+- Para la defensa: puedo mostrar en cada test el Arrange, el Act y el Assert, explicar qué verifica cada assert y qué caso **no** cubre, y reproducir en vivo una mutación (por ejemplo `<=` → `<` en `sePuedeBorrar`, que pone en rojo el caso `justo 24h`).
