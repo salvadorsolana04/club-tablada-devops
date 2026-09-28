@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { VENTANA_BORRADO_MS, enviarComunicado, sePuedeBorrar } from './comunicados.js'
+import { VENTANA_BORRADO_MS, enviarComunicado, sePuedeBorrar, tiempoParaBorrar } from './comunicados.js'
 
 const HORA = 60 * 60 * 1000
 const PUBLICADO = new Date('2026-09-26T10:00:00Z').getTime()
@@ -78,5 +78,32 @@ describe('enviarComunicado', () => {
     await expect(
       enviarComunicado({ titulo: 'Aviso', mensaje: 'Cuarto del día', foto: null }, cliente)
     ).rejects.toThrow('400')
+  })
+})
+
+// Un test por camino de tiempoParaBorrar. `ahora` entra por parámetro: no depende del reloj.
+describe('tiempoParaBorrar', () => {
+  const mensaje = { fecha: new Date(PUBLICADO).toISOString() }
+  const MINUTO = 60 * 1000
+
+  it('devuelve null si la fecha del mensaje es inválida', () => {
+    expect(tiempoParaBorrar({ fecha: 'no-es-una-fecha' }, PUBLICADO)).toBeNull()
+  })
+
+  it('devuelve null si la ventana de 24 hs ya venció', () => {
+    expect(tiempoParaBorrar(mensaje, PUBLICADO + VENTANA_BORRADO_MS + 1)).toBeNull()
+  })
+
+  it('cuenta en horas mientras falte al menos una hora', () => {
+    // publicado hace 20 h 30 min → quedan 3 h 30 min → se redondea para abajo
+    expect(tiempoParaBorrar(mensaje, PUBLICADO + 20 * HORA + 30 * MINUTO)).toBe('quedan 3 h')
+  })
+
+  it('pasa a minutos en la última hora', () => {
+    expect(tiempoParaBorrar(mensaje, PUBLICADO + VENTANA_BORRADO_MS - 12 * MINUTO)).toBe('quedan 12 min')
+  })
+
+  it('avisa cuando queda menos de un minuto (incluido el borde exacto de 24 hs)', () => {
+    expect(tiempoParaBorrar(mensaje, PUBLICADO + VENTANA_BORRADO_MS)).toBe('queda menos de un minuto')
   })
 })
