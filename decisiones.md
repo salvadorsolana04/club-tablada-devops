@@ -234,6 +234,8 @@ Lo que sigue sin cubrir en el backend son los `__str__` de los tres modelos y `P
 
 **Cómo frena.** La cobertura corre **adentro de los mismos jobs** del TP4 (`build-backend` y `build-frontend`), que ya son required checks de `main`: una etapa `test` en cada Dockerfile (`FROM build AS test`) que el job construye y corre. Si el número no llega, pytest/vitest salen con error → el `docker run` también → el job queda rojo → el merge se bloquea. La etapa `final` de cada imagen no se lleva nada de test: el backend copia el venv desde `build` (no desde `test`), y el frontend sigue siendo nginx con los estáticos.
 
+**Dónde verlo** — el resumen de cobertura (Summary de la corrida, tablas de backend y frontend) y los reportes descargables (artefactos `coverage-backend` y `coverage-frontend`, con el HTML navegable, el JSON y el resultado de los tests): la corrida verde del PR de las Tareas 1 y 2, https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36255877311 ([PR #31](https://github.com/salvadorsolana04/club-tablada-devops/pull/31)).
+
 ### 6. Por qué coverage alto no garantiza calidad (mi ejemplo)
 
 **Con solo los 16 tests que traía la app, `core/reglas.py` da 100 % de líneas y 100 % de ramas (6/6)** — la regla de borrado tiene un test con un mensaje reciente (rama "se puede") y otro con uno de 25 hs (rama "vencido"). Y sin embargo, si cambio `ahora - mensaje.fecha > VENTANA_BORRADO` por `>=`, **los 16 siguen en verde y la cobertura sigue en 100 %**: nadie prueba el borde exacto de 24 hs. Lo medí: el total del backend da exactamente lo mismo (95 %) con y sin mis 7 tests nuevos de `test_reglas.py`. Esos 7 **no suman ni un punto de cobertura**, y son los únicos que atrapan ese mutante (el `[justo-24h]` del parametrizado).
@@ -258,7 +260,35 @@ El mismo efecto, del otro lado: en Django, medir todo sin exclusiones daba 92 % 
 
 Los dos primeros sobreviven porque, sin la guarda, la query queda `filter(deporte=None, division=None)`, y como en `MensajeDivision` deporte y división son obligatorios, también devuelve vacío. **La guarda no es una regla: es una optimización** (evita ir a la base). El test protege el comportamiento que importa —que un usuario sin división no vea comunicados ajenos—, que es lo que rompería un bug de verdad (el tercer mutante). Podría verificar también la optimización (con `assertNumQueries`), pero eso sería testear cómo está implementado, no qué hace.
 
-### 8. Problemas encontrados y cómo los resolví
+### 8. El umbral bloqueando un merge
+
+**El Pull Request bloqueado (y después mergeado)**: https://github.com/salvadorsolana04/club-tablada-devops/pull/32 — «Muestra cuánto le queda al emisor para borrar un comunicado». Agrega `tiempoParaBorrar` en `src/lib/comunicados.js` (cuánto le queda al emisor para borrar su comunicado: "quedan 3 h", "quedan 12 min"…) y la usa en el tooltip del botón de borrar. Lo subí **a propósito sin tests**.
+
+- **Qué check se puso en rojo**: `build-frontend` (required), en el paso *Correr los tests del frontend con coverage*. `build-backend` quedó verde: el cambio no tocaba el backend. Con uno solo en rojo, el merge ya quedó bloqueado.
+- **En qué métrica**: en las **dos**. El log de la corrida roja (https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36450348241) dice:
+
+  ```
+  RUN  v5.0.2 /app
+        Tests  12 passed (12)
+  ERROR: Coverage for lines (52.63%) does not meet global threshold (90%)
+  ERROR: Coverage for branches (43.75%) does not meet global threshold (90%)
+  ```
+
+  Con vitest 5 las ramas de una función que ningún test llama **cuentan desde el principio**, por eso cae también en ramas (en vitest 3 habría frenado solo por líneas).
+- **Por qué**: compilaba, el build de la imagen pasaba y **los 12 tests pasaban todos**. Pero la función nueva sumó 11 líneas y 9 ramas que ningún test recorría: `src/lib` pasó de 8/8 líneas y 7/7 ramas a 10/19 y 7/16. El número que elegí en §5 lo frenó.
+- **Qué escribí para arreglarlo**: 5 tests, **uno por cada camino** que declara la función — fecha inválida (`null`), ventana vencida (`null`), "quedan N h", "quedan N min" y "queda menos de un minuto" (que incluye el borde exacto de 24 hs, coherente con `sePuedeBorrar`). `ahora` entra por parámetro, así los tests no dependen del reloj. Con eso volvió a 100 % / 100 %, el check pasó a verde (https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/36450612220) y se mergeó. La conversación del PR muestra la secuencia entera: el commit sin tests con su check rojo, el commit de los tests con su check verde, y el merge.
+
+**El freno vigente, en rojo (queda abierto hasta la defensa)**: PENDIENTE_TESTIGO
+
+**Por qué este freno es distinto del del TP4.** El del TP4 frenaba cuando el código **no construía** (una dependencia inexistente: la máquina diciendo "esto no anda"). Este frena código que **anda**: compila, construye y pasa todos sus tests. Lo que lo frena es un criterio de calidad que elegí yo — el umbral —, no un error.
+
+**Qué clase de error deja pasar igual:**
+- **Tests que ejecutan sin verificar**: la cobertura cuenta ejecución, no asserts (§6). Cinco tests sin un solo `expect` que llamaran a `tiempoParaBorrar` con las mismas cinco entradas habrían dejado el check igual de verde.
+- **Lo que está fuera de la cuenta**: un bug en un componente React, en el interceptor de `api/axios.js` o en `admin.py` no mueve ningún número.
+- **Errores de integración**: si el backend cambia el formato de un comunicado, el test con mock sigue verde porque el doble contesta lo de siempre. Eso se verifica end-to-end (TP7).
+- **Código nuevo chico en el backend**: con el umbral en 90 y la medición en 96,61 %, una función nueva de menos de ~9 líneas/ramas sin tests todavía pasa.
+
+### 9. Problemas encontrados y cómo los resolví
 
 - **`npm i -D vitest` instaló la versión 3, con un `vite@7` anidado aparte del `vite@8` de la app.** Causa: mi Node local es el 23 (versión impar) y vitest 4 y 5 declaran soporte solo para Node 20/22/24+, así que npm cayó a la última que lo aceptaba. El Dockerfile (y por lo tanto el CI) usa `node:22`, donde vitest 5 es compatible, así que fijé `vitest@^5.0.2`: comparte el mismo `vite@8.2.1` de la app, sin copias.
 - **Al instalar vitest 5, npm 10 falló con `Cannot read properties of null (reading 'edgesOut')`**, un bug del resolvedor de npm 10 con las dependencias opcionales de vitest 5 — incluso partiendo de un `npm ci` limpio. Lo instalé con npm 11 (`npx npm@11 i -D vitest@^5.0.2`) y después verifiqué que el lockfile resultante lo acepte `npm ci` con npm 10 (el que trae `node:22`), porque es el que va a correr en el Docker del pipeline.
