@@ -14,6 +14,10 @@ backend/htmlcov/
 backend/coverage.xml
 backend/.pytest_cache/
 
+# salida de correr los tests con docker en local (la monta el -v del docker run)
+backend-coverage/
+frontend-coverage/
+
 # Frontend (Node / Vite)
 frontend/node_modules/
 frontend/dist/
