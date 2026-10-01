@@ -43,7 +43,7 @@ export default function Login() {
           </div>
           <div className="text-xl font-extrabold text-slate-900">Club La Tablada</div>
           <div className="mt-1 text-[13px] text-slate-500">
-            Portal de socios &middot; Rugby y Hockey
+            Portal de socios &middot; Rugby y Hockey &middot; Córdoba
           </div>
         </div>
 
