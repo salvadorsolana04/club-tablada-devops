@@ -236,3 +236,14 @@ class MensajeDivisionBorradoTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertTrue(MensajeDivision.objects.filter(id=self.mensaje.id).exists())
+
+
+
+
+class HealthTests(APITestCase):
+    def test_health_responde_sin_login_y_cuenta_en_la_base(self):
+        response = self.client.get(reverse('health'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['estado'], 'ok')
+        self.assertEqual(response.data['noticias'], 0)
+        self.assertEqual(response.data['commit'], 'local')
