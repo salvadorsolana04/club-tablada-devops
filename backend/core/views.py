@@ -1,3 +1,5 @@
+import os
+
 from django.utils import timezone
 from rest_framework import generics, permissions
 from rest_framework.response import Response
@@ -58,3 +60,17 @@ class MensajeDivisionDestroyView(generics.DestroyAPIView):
     def perform_destroy(self, instance):
         validar_borrado(instance, self.request.user, timezone.now())
         instance.delete()
+
+
+class HealthView(APIView):
+    """Para el smoke test del deploy: público, toca la base y dice qué commit corre."""
+
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        return Response({
+            'estado': 'ok',
+            'noticias': Noticia.objects.count(),
+            'commit': os.environ.get('RENDER_GIT_COMMIT', 'local'),
+        })
