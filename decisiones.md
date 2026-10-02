@@ -24,7 +24,7 @@ docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-
 | **QA** | https://club-tablada-front-qa.onrender.com | https://club-tablada-api-qa.onrender.com/api/v1/health/ |
 | **PROD** | https://club-tablada-front-prod.onrender.com | https://club-tablada-api-prod.onrender.com/api/v1/health/ |
 
-Están en el plan gratuito de Render: si llevan más de 15 minutos sin tráfico, el primer pedido tarda unos 40 segundos en despertarlos (ver TP6 §5).
+Están en el plan gratuito de Render: si llevan más de 15 minutos sin tráfico, el primer pedido tarda unos 40 segundos en despertarlos (ver TP6 §6).
 
 **Corridas del gate hacia producción:**
 
