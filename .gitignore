@@ -23,6 +23,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 frontend/coverage/
+# reportes de Playwright (se generan en cada corrida)
+frontend/playwright-report/
+frontend/test-results/
 
 # Claude Code local settings
 .claude/settings.local.json

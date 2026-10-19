@@ -49,18 +49,19 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-[12.5px] font-medium text-red-700">
+            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-[12.5px] font-medium text-red-700">
               {error}
             </p>
           )}
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+            <label htmlFor="username" className="mb-1.5 block text-xs font-semibold text-slate-700">
               Usuario / DNI
             </label>
             <div className="flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 px-3.5 py-2.5">
               <User size={16} strokeWidth={2} className="flex-none text-slate-400" />
               <input
+                id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Ej: 34.567.890"
@@ -72,12 +73,13 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+            <label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-slate-700">
               Contraseña
             </label>
             <div className="flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 px-3.5 py-2.5">
               <Lock size={16} strokeWidth={2} className="flex-none text-slate-400" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

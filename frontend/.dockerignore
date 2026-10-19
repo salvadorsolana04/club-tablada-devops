@@ -4,3 +4,6 @@ dist/
 .env
 # reportes de cobertura locales
 coverage/
+# reportes de Playwright locales
+playwright-report/
+test-results/

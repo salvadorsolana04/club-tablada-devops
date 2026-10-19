@@ -205,9 +205,95 @@ jobs:
           done
           echo "❌ QA no respondió con este commit a tiempo"; exit 1
 
+  # Integración: pedidos HTTP a la api de QA (la que ejecuta la imagen de ESTA corrida),
+  # con su base de verdad, sin navegador y sin dobles. Va antes de la e2e: es más rápida
+  # y más barata, y si la api está rota no vale la pena levantar un browser para confirmarlo.
+  integracion:
+    runs-on: ubuntu-latest
+    needs: deploy-qa
+    timeout-minutes: 15
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias (sin navegador)
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Integración contra la api de QA
+        env:
+          API_BASE_URL: https://club-tablada-api-qa.onrender.com   # la API, no el front
+          E2E_PASSWORD_ENTRENADOR: ${{ secrets.E2E_PASSWORD_ENTRENADOR }}
+        run: npx playwright test e2e/api.spec.js
+        working-directory: ./frontend
+
+      - name: Resumen de la integración
+        if: ${{ !cancelled() }}
+        run: node ../.github/scripts/resumen-playwright.js "Integración (api de QA)" >> "$GITHUB_STEP_SUMMARY"
+        working-directory: ./frontend
+
+      - name: Publicar reporte de integración
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-integracion   # distinto del de e2e: dos iguales rompen la corrida
+          path: frontend/playwright-report
+          retention-days: 90                     # el máximo: tienen que seguir ahí en la defensa
+
+  # e2e: un Chromium de verdad usando el front de QA, que le habla a su api y a su base.
+  # Si la integración falló, no corre: su needs no se cumple.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: integracion
+    timeout-minutes: 20               # si algo se cuelga, el job muere en vez de esperar horas
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+        working-directory: ./frontend
+
+      - name: e2e contra el front de QA
+        env:
+          E2E_BASE_URL: https://club-tablada-front-qa.onrender.com   # el FRONT de QA
+          E2E_PASSWORD_ENTRENADOR: ${{ secrets.E2E_PASSWORD_ENTRENADOR }}
+          E2E_PASSWORD_JUGADOR: ${{ secrets.E2E_PASSWORD_JUGADOR }}
+        run: npx playwright test e2e/division.spec.js   # SU archivo: sin esto correría también la integración
+        working-directory: ./frontend
+
+      - name: Resumen de la e2e
+        if: ${{ !cancelled() }}
+        run: node ../.github/scripts/resumen-playwright.js "e2e (front de QA)" >> "$GITHUB_STEP_SUMMARY"
+        working-directory: ./frontend
+
+      - name: Publicar reporte e2e
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}         # el reporte importa MÁS cuando falla
+        with:
+          name: playwright-report-e2e
+          path: frontend/playwright-report
+          retention-days: 90
+
   deploy-prod:
     runs-on: ubuntu-latest
-    needs: deploy-qa                  # PROD solo después de QA vivo (y hereda su if de main)
+    needs: e2e                        # ← EL gate: sin integración y e2e verdes, ni se pide aprobación
     environment: production           # ⏸ acá el workflow se pausa hasta que alguien apruebe
     concurrency:
       group: deploy-prod              # nunca dos deploys a PROD pisándose
