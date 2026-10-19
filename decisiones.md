@@ -1,3 +1,35 @@
+# Enlaces del TP7 — Contenedores en el pipeline + integración y e2e
+
+**a) Los dos paquetes públicos del registry**, con sus etiquetas `sha-<commit>` (se bajan sin credenciales):
+
+- Backend: https://github.com/users/salvadorsolana04/packages/container/package/club-tablada-devops-backend
+- Frontend: https://github.com/users/salvadorsolana04/packages/container/package/club-tablada-devops-frontend
+
+**La cadena cerrada** (Tarea 1): desde el [PR #43](https://github.com/salvadorsolana04/club-tablada-devops/pull/43), los cuatro servicios de Render tienen como fuente *Existing Image* y el pipeline les dice qué imagen ejecutar con `imgURL=…:sha-<commit>`. Primera corrida completa, del merge `92b6438`: https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39196824165
+
+```bash
+docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-backend:sha-92b6438aa4600c6bd2d73502480017029cbeb204
+docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-frontend:sha-92b6438aa4600c6bd2d73502480017029cbeb204
+```
+
+**Lo que se ve en Render** (no se puede linkear: lo muestro en vivo en la defensa; las capturas quedan de respaldo). En los cuatro servicios, el deploy de esa corrida dice *Trigger: Deploy Hook* y nombra la imagen `sha-92b6438…`. *Source* es el **digest** del manifiesto `linux/amd64` de esa imagen en ghcr.io, y es el mismo en QA y en PROD:
+
+| | QA | PROD |
+|---|---|---|
+| **api** (`…-backend:sha-92b6438…`, digest `sha256:20c8ad3…`) | ![api QA](docs/tp7/render-api-qa.png) | ![api PROD](docs/tp7/render-api-prod.png) |
+| **front** (`…-frontend:sha-92b6438…`, digest `sha256:658a5ef…`) | ![front QA](docs/tp7/render-front-qa.png) | ![front PROD](docs/tp7/render-front-prod.png) |
+
+**d) Las URLs de los dos entornos** (vivas hasta la defensa):
+
+| | Front (la app) | API (`/api/v1/health/` dice qué commit corre) |
+|---|---|---|
+| **QA** | https://club-tablada-front-qa.onrender.com | https://club-tablada-api-qa.onrender.com/api/v1/health/ |
+| **PROD** | https://club-tablada-front-prod.onrender.com | https://club-tablada-api-prod.onrender.com/api/v1/health/ |
+
+<!-- Pendiente: b) la corrida con integración VERDE y e2e ROJA (commit que rompe, corrida, los dos reportes) y c) la corrida completa en verde posterior, hasta PROD. -->
+
+---
+
 # Enlaces de este TP6 — CD: environments, aprobaciones y deployment patterns
 
 **a) Los dos paquetes públicos del registry** (se bajan sin credenciales):
