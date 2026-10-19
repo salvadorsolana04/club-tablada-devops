@@ -26,7 +26,20 @@ docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-
 | **QA** | https://club-tablada-front-qa.onrender.com | https://club-tablada-api-qa.onrender.com/api/v1/health/ |
 | **PROD** | https://club-tablada-front-prod.onrender.com | https://club-tablada-api-prod.onrender.com/api/v1/health/ |
 
-<!-- Pendiente: b) la corrida con integración VERDE y e2e ROJA (commit que rompe, corrida, los dos reportes) y c) la corrida completa en verde posterior, hasta PROD. -->
+**b) La e2e ROJA frenando la promoción, con la integración VERDE** (Tarea 4):
+
+- Commit que rompió la app: `6522569` ([PR #45](https://github.com/salvadorsolana04/club-tablada-devops/pull/45)) — una sola línea de `frontend/src/pages/Division.jsx`: el botón del comunicado pasa de «Enviar» a «Publicar». No toca `e2e/`.
+- La corrida: https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39323334238 — builds 🟢 → `deploy-qa` + smoke 🟢 → `integracion` 🟢 → `e2e` 🔴 (1 passed, 2 failed) → `deploy-prod` **salteado**, sin llegar a pedir aprobación.
+- Reporte de integración, en **verde**: [`playwright-report-integracion`](https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39323334238/artifacts/12220842384)
+- Reporte e2e, en **rojo** (screenshot y traza del fallo): [`playwright-report-e2e`](https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39323334238/artifacts/12220599505)
+
+La captura que trae el reporte rojo: el formulario lleno y el botón que el test buscaba como «Enviar», llamado «Publicar».
+
+![e2e roja: el botón dice Publicar](docs/tp7/e2e-rojo-boton-publicar.png)
+
+**c) La corrida completa en verde posterior, hasta PROD**: el arreglo `7af3618` ([PR #46](https://github.com/salvadorsolana04/club-tablada-devops/pull/46)) → https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39324778060 — builds → `deploy-qa` → `integracion` 3/3 → `e2e` 3/3 → aprobación (*Review deployments*) → `deploy-prod`, con el mismo `imgURL` (`sha-7af3618…`) en los dos deploys y el mismo commit en los dos smokes. Sus reportes: [`playwright-report-integracion`](https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39324778060/artifacts/12220538901) y [`playwright-report-e2e`](https://github.com/salvadorsolana04/club-tablada-devops/actions/runs/39324778060/artifacts/12220389270).
+
+Los reportes se guardan 90 días (el máximo de un repo público).
 
 ---
 
@@ -605,3 +618,145 @@ Toda la configuración, aprovisionamiento y validación fue ejecutada, auditada 
 - **Validación local previa**: verifiqué en mi máquina el comportamiento de `default.conf.template` levantando contenedores con y sin variables para constatar que la sustitución generara los upstreams correctos antes de commitear, y corrí localmente la suite de tests del backend en Docker (25 tests pasando, 96,77 % de cobertura).
 - **Aislamiento real de datos**: comprobé visual y funcionalmente ambos ambientes creando datos de prueba diferenciados (una noticia en QA y otra en PROD), y confirmé mediante queries directas en el SQL Editor de Neon que las bases estaban completamente desacopladas y no compartían registros.
 - **Control de despliegue y gates**: gestioné manualmente el ciclo de vida de los deploys en GitHub Actions, aprobando y rechazando las promociones hacia `production` tras revisar el smoke test de QA, y ejecuté la prueba de rollback en Render midiendo el tiempo de recuperación. Comprendo y soy capaz de defender en la instancia oral el recorrido completo desde el merge a `main` hasta la verificación final en producción.
+
+---
+
+## TP7 — Contenedores en el pipeline + integración y e2e
+
+### 1. Build once, deploy many: qué problema del TP6 resuelve
+
+En el TP6 mi pipeline publicaba la imagen verificada, pero Render **reconstruía** la app desde el repositorio en cada deploy: eran tres construcciones del mismo commit (la del pipeline, la de QA y la de PROD). En el TP6 §7 anoté por qué podían salir distintas: `psycopg[binary]>=3.2.0` no tiene versión fija en `backend/requirements.txt`, y `python:3.13-slim`, `node:22-alpine` y `nginx:alpine` son etiquetas que se mueven. Si entre el build de QA y el de PROD salía una versión nueva de `psycopg`, PROD corría un driver de Postgres que nadie había probado.
+
+Desde el [PR #43](https://github.com/salvadorsolana04/club-tablada-devops/pull/43) el pipeline construye cada imagen **una sola vez** y los cuatro servicios de Render la **ejecutan** (*Existing Image*). La prueba está en *Deploys* de Render (capturas en «Enlaces del TP7»): QA y PROD muestran el mismo *Source*, que es el **digest** del manifiesto `linux/amd64` de la imagen en ghcr.io (`20c8ad3` la api, `658a5ef` el front). Mismo digest = mismos bytes. Y los deploys duran 30 s y 11 s: no hay build, solo descarga y arranque.
+
+Aunque el código sea idéntico, una reconstrucción no da lo mismo: el `Dockerfile` dice *cómo* construir, no *qué* sale. Lo que sale depende de lo que el registry de Python, el de npm y Docker Hub contesten en ese momento.
+
+### 2. Estrategia de etiquetas
+
+- **`sha-<commit>` en el registry** (los 40 caracteres): dice de qué commit salió cada imagen. Backend y frontend de una misma corrida comparten etiqueta. Es lo que el pipeline promueve: `imgURL=…:sha-${{ github.sha }}` va igual a QA y a PROD.
+- **`v7.0.0` en git**: es el nombre de la versión que anduvo en PROD. El tag no apunta a una imagen, apunta a un commit, y del commit se llega a la imagen (§3).
+- **Por qué no publico `latest`**: `latest` es un puntero que se mueve con cada merge, y no dice qué contenido hay detrás. Un deploy que lo nombrara ejecutaría «lo último que se publicó», haya pasado las e2e o no, y después no podría decir qué desplegué. Con una sola etiqueta por imagen, la de su commit, no hay forma de desplegar algo sin decir exactamente qué es.
+- **Los tags también se mueven.** `sha-<commit>` es una etiqueta, y si vuelvo a correr la corrida de un commit, el pipeline la vuelve a publicar, quizás con otro contenido (otra base, otra dependencia resuelta). Si alguien moviera un tag a mano, mi cadena desplegaría esa otra imagen sin enterarse: el smoke seguiría dando verde, porque el commit horneado sería el mismo. Lo único que no se mueve es el digest. Por eso una corrida vieja no se re-corre para desplegar, y si quisiera la garantía completa, el `imgURL` del hook acepta el digest en lugar del tag.
+- **Con qué imagen configuré los servicios en Render**: `sha-f807ff3…`, la del último merge del TP6, que era una imagen que ya había comprobado que existía y era pública. **No es la que corre**: Render solo exige que coincidan el registry y el nombre de la imagen, y la etiqueta la dice cada deploy del pipeline con su `imgURL`. *Settings* sigue mostrando `f807ff3` aunque los servicios corran la última imagen. Por eso no uso *Manual Deploy*: despliega la imagen de *Settings*, no la última, y llevaría producción para atrás en verde y sin avisar.
+- **No creé servicios nuevos**: les cambié la fuente a los cuatro que ya tenía. Así conservé las URLs, las variables, los deploy hooks (no hubo que recargar ningún secret) y el historial. Antes de cambiar los cuatro probé con uno solo (el front de QA), desplegándolo a mano con su hook y la imagen de `f807ff3`. Contestó `{"deploy":{"id":…}}` y en *Deploys* apareció «Trigger: Deploy Hook» con esa imagen.
+
+### 3. De la release a la imagen, en un paso
+
+`v7.0.0` va sobre el commit que **está en PROD** según *Deployments* (`gh api 'repos/{owner}/{repo}/deployments?environment=production' --jq '.[0].sha'`), no sobre el último de `main`. Pueden no ser el mismo: un merge rechazado o esperando aprobación está en `main` y nunca llegó a PROD.
+
+Del tag a la imagen:
+
+```bash
+SHA=$(git rev-list -n1 v7.0.0)
+docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-backend:sha-$SHA
+docker pull --platform linux/amd64 ghcr.io/salvadorsolana04/club-tablada-devops-frontend:sha-$SHA
+```
+
+Esa etiqueta está en mis dos paquetes. Volver a esa versión es mandarle esa imagen al hook, con el mismo mecanismo del deploy y sin construir nada.
+
+### 4. Cómo se comprueba desde afuera que un entorno ejecuta MI imagen
+
+Tres cosas, de la más fuerte a la más débil:
+
+1. **El digest en Render.** En *Deploys* de cada servicio, *Source* es el digest de la imagen que bajó. Lo comparé con el del registry pidiéndole a ghcr.io el índice de `sha-92b6438…`: el manifiesto `linux/amd64` del backend es `sha256:20c8ad317747…` y el del front es `sha256:658a5efaef55…`, exactamente lo que muestra Render. Un build de Render no tendría ese digest. La otra entrada del índice (`unknown/unknown`) es la *attestation* que agrega buildx, no una segunda imagen. Además, el deploy dice «Trigger: Deploy Hook», así que lo disparó una corrida y no el panel.
+2. **El commit horneado en la imagen.** Esto ya lo hice, aunque la guía (§2.4) lo deja como concepto. Con *Existing Image*, Render no define `RENDER_GIT_COMMIT`, que era lo que usaba mi smoke del TP6, así que sin cambiar nada el smoke iba a esperar el commit para siempre. Ahora el `Dockerfile` del backend tiene `ARG GIT_COMMIT` al final de la etapa `final`, el pipeline lo completa con `build-args: GIT_COMMIT=${{ github.sha }}` y `/api/v1/health/` lo devuelve. El smoke compara ese valor contra el commit de la corrida, así que un deploy que no ocurrió, o que falló y dejó la versión anterior, pone la corrida en rojo sin que nadie mire. Se ve en el log del deploy a PROD de la corrida (c): los intentos 1 y 2 todavía contestaban `b7956d3` (la versión anterior seguía sirviendo) y el 3 contestó `7af3618`. El `ARG` va al final para que, al cambiar en cada commit, invalide solo esa capa del cache.
+3. **Qué NO alcanza a probar el smoke**: que la app **funcione**. Pregunta si responde y con qué commit, no si se puede publicar un comunicado. La corrida (b) lo muestra: el smoke dio verde con el botón roto. Tampoco ve la versión del **front**: el commit lo informa la api, y el front se comprueba por el digest en *Deploys*. Tampoco ve si la base es la correcta.
+
+### 5. Qué probé en cada suite, y qué dejé afuera
+
+Los usuarios de prueba son `e2e-entrenador` y `e2e-jugador`, en una división propia, `rugby · E2E`. Así lo que crean las pruebas no le aparece a ningún jugador real, y los datos reales no mueven los conteos de las pruebas. Los creé en `app_qa` con la imagen publicada (`manage.py shell`), con un seguro que se corta si la base no es `app_qa`, y con contraseñas al azar que fueron directo a los secrets `E2E_PASSWORD_ENTRENADOR` y `E2E_PASSWORD_JUGADOR`, sin mostrarse.
+
+**Integración (`frontend/e2e/api.spec.js`, contra la api de QA, sin navegador):**
+
+1. Alta + verificación + borrado: `POST` → `201`; el `GET` lo encuentra (y con la división `E2E` que le puso la api); `DELETE` → `204`; el `GET` ya no lo encuentra.
+2. Alta inválida: título vacío → `400` con el campo `titulo` en el error, y la lista tiene la misma cantidad que antes.
+3. **La que elegí: el límite de 3 comunicados por día.** Tres altas entran y la cuarta da `400` con el motivo «límite»; después borro las tres y compruebo que no queda ninguna. La elegí porque es la regla que en el TP5 probé con un **doble**: `validar_limite_diario` recibe la función que cuenta, y el test le pasaba un `Mock(return_value=3)`. Ese test nunca vio la consulta de verdad (`fecha__date=timezone.localdate()`, con `USE_TZ` y la zona de Buenos Aires), que es justo lo que el doble no ve (§2.5). Si se rompe, me escribe un entrenador al que la app le dice que llegó al límite sin haber mandado nada, o un jugador inundado de mensajes porque el límite dejó de existir.
+
+**e2e (`frontend/e2e/division.spec.js`, Chromium contra el front de QA):**
+
+1. **Creación**: el entrenador entra por el formulario de login, va a *Mi División* con el link de la barra, publica un comunicado con un título único, lo ve, lo borra con su botón «Borrar <título>» y comprueba que ya no está.
+2. **Error**: un título de más de 200 caracteres (el máximo del modelo). La api contesta `400` (el test lo verifica en la respuesta real, no inventada), el usuario ve el aviso «No se pudo enviar el comunicado.» (`role="alert"`) y en la base no hay nada con ese título.
+3. **La que elegí, la de todos los días**: el entrenador avisa algo y el **jugador** entra a *Mi División* y lo lee (y no le aparece el botón de borrar, porque no es suyo). Es para lo que existe la app: si mañana no anda, el que me escribe es el jugador que no se enteró de que el entrenamiento cambió de cancha. Toca la base, el filtro por división y el login de un segundo rol. El comunicado de este test lo crea el entrenador por la api y no por la pantalla, porque publicar por la pantalla ya lo cubre el flujo 1.
+
+Para que la e2e encuentre los controles como una persona (`getByLabel`, `getByRole`) tuve que **arreglar la accesibilidad del front**: el login tenía labels sin asociar a su campo, el formulario de comunicados no tenía labels, el botón de borrar era un ícono sin nombre y las tarjetas ni mostraban el título. Agregué `htmlFor`/`id`, `aria-label`, `role="alert"` y el título visible. El test me señaló un problema real de la app, no un límite de Playwright.
+
+**Qué NO puse, y por qué (pirámide):**
+
+- **En e2e** no puse el límite diario, la ventana de 24 h para borrar, los permisos por rol en detalle ni la validación del modelo `Usuario`. Son reglas que ya prueban los unitarios del TP5 en milisegundos, y el límite además lo prueba la integración en segundos. Repetirlas arriba costaría minutos por corrida y más flakiness sin ver nada nuevo. Tampoco cubre las noticias (las publica el admin, y no es lo que más se usa) ni las fotos (en Render se pierden en cada deploy, como anoté en el TP6).
+- **En integración** no hay nada de pantalla: si el front usa bien la api, lo dice la e2e. Tampoco repito cada combinación de permisos, que es terreno de los unitarios.
+
+### 6. Integración vs e2e: el par verde/rojo que diagnosticó mi rotura
+
+La integración le habla a la api **directamente**, con los nombres correctos de campos y rutas: prueba que la api desplegada y su base se entienden. La e2e usa la **pantalla**: prueba que el front usa bien esa api. No es lo mismo, y juntas dan un diagnóstico:
+
+| integración | e2e | Qué se rompió |
+|---|---|---|
+| 🟢 | 🔴 | El front: la api está sana, pero la pantalla no la usa bien |
+| 🔴 | ⬜ no corre | La api o la base |
+| 🟢 | 🟢 | Nada de lo que estas dos ven |
+
+**Mi corrida roja fue la fila 1**, y lo leí en los reportes, no en el código. El de integración tenía 3/3: la api creó, listó, rechazó y borró en su base, así que la api y la base estaban sanas. En el de e2e, los dos flujos del entrenador fallaron igual en los dos intentos (timeout de 60 s). El `error-context` dice `waiting for getByRole('button', { name: 'Enviar', exact: true })`, y en el snapshot de la página el botón que **existe** es `button "Publicar"`. La captura muestra el formulario lleno y el botón «Publicar». El flujo del jugador, que no usa ese botón, pasó. Conclusión: el que cambió fue el front, el botón de publicar.
+
+Un detalle del reporte: el test del título largo no dice «no encontré el botón» sino `page.waitForResponse: Test timeout`. Es porque el test arma la escucha de la respuesta antes del click, y como el click nunca ocurre, tampoco llega ningún `POST`. La causa es la misma.
+
+Si hubiera roto **la api** (por ejemplo, renombrar `titulo` en el serializer), la integración habría quedado roja y la e2e **no habría corrido** (su `needs` no se cumple): fila 2. No se gasta un navegador en confirmar algo que ya se sabe.
+
+**Un cambio de una línea que solo la integración atraparía**: en `contar_mensajes_hoy`, cambiar `fecha__date=timezone.localdate()` por `fecha=timezone.localdate()`. Compila. Compara un instante con una fecha, así que no encuentra ningún mensaje y el conteo da siempre 0: el límite deja de existir. El unitario del TP5 sigue verde (el `Mock` contesta 3 igual), la e2e también (no prueba el límite), y la integración se pone roja porque el cuarto comunicado entra con `201`.
+
+**Lo que NO ataja mi gate**: lo que no recorren mis pocos flujos (noticias, fotos, el «Recordarme» del login), lo que solo pasa en PROD (la base de PROD, su volumen de datos, una variable mal cargada en PROD, porque las suites corren contra QA), lo visual (un botón tapado que igual se puede clickear por código), el rendimiento, y un deploy del front que falla en silencio (el front no informa su commit; eso lo miro en *Deploys*).
+
+### 7. Por qué mi integración es la amplia, y qué gana y qué pierde
+
+Hay dos formas de escribirla. La **estrecha** levanta la api dentro del pipeline (en Django, `pytest` con `APIClient` y un Postgres como `services:` del job), contra una base que nace y muere con la corrida. La **amplia** le habla a la api **ya desplegada** en QA, con su base de Neon.
+
+Elegí la amplia porque QA ya ejecuta la imagen exacta de la corrida, y con un décimo de la configuración prueba el mismo concepto.
+
+- **Gana**: prueba la imagen que va a ir a PROD, en su entorno real: la base de Neon, el driver de Postgres de esa imagen, las variables de Render y la red. Además prueba que el deploy quedó bien.
+- **Pierde**: llega más tarde (después del deploy, y no en el PR), depende de que QA esté despierto, y comparte la base con las e2e y con otras corridas (§9). Una prueba que deja basura afecta a la siguiente, y un rojo puede ser de QA y no de mi código.
+
+### 8. Cold start y tests flaky
+
+**Un test flaky** es uno que a veces pasa y a veces falla sin que cambie el código. Es peor que no tener test porque entrena al equipo a ignorar el rojo: el día que falla por un bug de verdad, nadie le cree.
+
+Cómo lo manejo, sin ningún `sleep`:
+
+- **El smoke despierta QA** antes de las suites (la api primero, después el front a través de nginx). Lo vi el primer día: el front de QA me daba `502` en `/api/v1/health/` porque la api estaba dormida, y cuando le pegué directo tardó 43,7 s en despertar. Después de eso, el mismo pedido por el front tardó 1,9 s.
+- **Timeouts largos** (`playwright.config.js`): 60 s por test y 15 s por aserción (el default es 5 s). Playwright **espera** a que aparezca lo que busca (*auto-waiting*): si aparece en 2 s, sigue en 2 s.
+- **Un reintento** (`retries: 1`): absorbe una demora suelta. Si un test pasa recién al reintentar, sale como **flaky** en el reporte y en el resumen de la corrida, que dice `N passed · N failed · N flaky · N skipped`. Uno aislado puede ser la red; el mismo dos corridas seguidas es el test, y se arregla.
+- **`workers: 1`**: QA es uno solo y el límite de 3 comunicados diarios se cuenta en su base, así que dos pruebas creando a la vez se pisarían el conteo.
+- **Nada de `test.skip`** ni de tests que se saltean solos si QA no responde: si no responde, el rojo es la respuesta correcta.
+
+En las tres corridas contra QA: 0 flaky. La e2e verde tarda ~40 s y la integración ~15 s. La roja tardó ~5 min: 2 tests × 2 intentos × 60 s, no un cuelgue.
+
+**Que una corrida no ensucie a la siguiente**: todo lo que crean las pruebas lleva la hora en el título (`e2e largo 1792443698519`, el de la captura de la corrida roja), así que no choca con otra corrida. Se borra en un `afterEach`, que corre **aunque el test falle**, y que además comprueba que no quedó nada. **Cómo me daría cuenta si pasara**: la prueba del límite diario. Si una corrida dejara comunicados del entrenador de prueba, la siguiente no podría crear los tres de hoy y se pondría roja en el primero o el segundo, con el mensaje «el comunicado N de 3 tiene que entrar». Si un test se cortara antes de borrar y pasaran 24 h, la api ya no deja borrar (es la regla de la ventana): esa basura se borra a mano en Neon.
+
+### 9. Límite conocido: QA es uno solo
+
+QA lo comparten todas mis corridas, y ahora además las dos suites. Con dos merges seguidos, la corrida B puede redesplegar QA mientras la integración o la e2e de la A lo están usando.
+
+- **Qué vería**: un rojo en la A que no es de mi código (en mi app, típicamente un `400` por el límite diario, porque las pruebas de A y B crean comunicados a la vez), o algo peor: un verde que en parte probó la imagen de B.
+- **Cómo lo reconocería**: en *Deploys* del servicio de QA, qué imagen corría y a qué hora; en *Actions*, si el `deploy-qa` de B corrió mientras la e2e de A estaba corriendo.
+- **Qué haría**: rechazar la A con el motivo (si su e2e quedó roja, ni siquiera pide aprobación) y quedarme con la B, que trae los dos cambios. No re-correría los jobs de la A, porque QA ya tiene la imagen de B y probarían esa. El `concurrency` no lo resuelve, porque cancela lo que está en cola, y un job esperando aprobación no está en cola. La regla que sigo: **un merge por vez**, mirando *Actions* antes de mergear. Un equipo real lo resolvería con un entorno por corrida.
+
+### 10. La misma imagen del front en QA y en PROD
+
+Es lo que preparé en el TP6 §4, y acá se usa de verdad.
+
+- **Adentro de la imagen, igual en todos lados**: el build de Vite, que llama a `/api/v1` relativo a su propio origen (`VITE_API_URL=/api/v1` en el `Dockerfile`), y la plantilla de nginx.
+- **Por variable, en cada servicio de Render**: `BACKEND_URL` (la api de **su** entorno) y `DNS_RESOLVER`.
+
+La imagen `…-frontend:sha-7af3618…` es una sola, y lo único que hace que hable con la api de QA o con la de PROD es esa variable.
+
+En el backend pasa lo mismo: `DATABASE_URL`, `SECRET_KEY` y `DEBUG` van por variable, y como la imagen es pública, **no lleva secretos**. Lo que sí lleva adentro es el commit (`GIT_COMMIT`), que es igual para los dos entornos porque es la misma imagen.
+
+### 11. Problemas encontrados y cómo los resolví
+
+- **El smoke del TP6 iba a quedar rojo para siempre.** Comparaba el commit con `RENDER_GIT_COMMIT`, que Render solo define cuando construye desde el repo. Con *Existing Image*, `/health` iba a devolver `"local"`. Lo resolví horneando el commit en la imagen (§4).
+- **El `build-args` en el paso equivocado.** La primera versión lo tenía en «Construir la etapa de tests del backend» (`target: test`), y no en el paso que **publica**. La imagen publicada habría salido sin el commit, y el smoke habría esperado los 30 intentos (~10 min) antes de dar rojo. Lo vi revisando el diff antes del commit, y lo confirmé leyendo el YAML: solo el paso que publica tiene `build-args`.
+- **Un `502` a través del front de QA**, recién desplegado: era la api dormida (cold start de ~44 s), no un error del deploy (§8).
+- **Mi compose local respondía `404` en `/health`.** En mi Mac tengo dos motores de Docker: OrbStack (el activo) y Docker Desktop, que tenía corriendo hacía 10 días el compose de mi carpeta principal, con un backend anterior a `/health`, ocupando los puertos 3000 y 8000. Mis contenedores nuevos arrancaban, pero los pedidos le llegaban al viejo. Para no tocar ese stack, levanté el nuevo en los puertos 13000/18000 con un archivo de override (`ports: !override`), sin cambiar el `docker-compose.yml` del repo.
+- **El error del límite viene como lista.** DRF envuelve el mensaje de un `ValidationError` en una lista (`{"detail": ["Alcanzaste el límite…"]}`). La aserción busca «límite» en todo el cuerpo.
+- **vitest y Playwright en la misma carpeta.** vitest toma por defecto todo `*.spec.js` y habría intentado correr los specs de Playwright, poniendo rojo `build-frontend`. Lo excluí antes de escribir el primer spec (`exclude: [...configDefaults.exclude, 'e2e/**']` en `vite.config.js`), y los reportes de Playwright quedaron fuera de git y del contexto de Docker.
+
+### 12. Declaración de uso de IA (TP7)
+
