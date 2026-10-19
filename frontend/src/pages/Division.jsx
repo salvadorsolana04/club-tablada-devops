@@ -121,13 +121,18 @@ export default function Division() {
             </span>
           </div>
 
-          {error && <p className="mb-3 text-[13px] font-medium text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="mb-3 text-[13px] font-medium text-red-600">
+              {error}
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
             <input
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Título del comunicado"
+              aria-label="Título del comunicado"
               required
               className="w-full rounded-[9px] border-[1.5px] border-slate-200 px-3.5 py-2.5 font-sans text-sm text-slate-900 outline-none focus:border-sky-500"
             />
@@ -135,6 +140,7 @@ export default function Division() {
               value={mensaje}
               onChange={(e) => setMensaje(e.target.value)}
               placeholder="Ej: Recuerden que mañana el entrenamiento es a las 18:30 en cancha 2..."
+              aria-label="Mensaje del comunicado"
               rows={3}
               required
               className="w-full resize-y rounded-[9px] border-[1.5px] border-slate-200 px-3.5 py-2.5 font-sans text-sm text-slate-900 outline-none focus:border-sky-500"
@@ -182,7 +188,9 @@ export default function Division() {
       </div>
 
       {errorBorrado && (
-        <p className="mb-3 text-[13px] font-medium text-red-600">{errorBorrado}</p>
+        <p role="alert" className="mb-3 text-[13px] font-medium text-red-600">
+          {errorBorrado}
+        </p>
       )}
 
       {cargando ? (
@@ -211,12 +219,14 @@ export default function Division() {
                       onClick={() => handleDelete(m.id)}
                       disabled={borrandoId === m.id}
                       title={`Borrar comunicado (${tiempoParaBorrar(m)})`}
+                      aria-label={`Borrar ${m.titulo}`}
                       className="flex-none text-slate-400 transition hover:text-red-600 disabled:opacity-50"
                     >
                       <Trash2 size={14} strokeWidth={2.2} />
                     </button>
                   )}
                 </div>
+                <h3 className="mb-1 text-[14px] font-bold text-slate-900">{m.titulo}</h3>
                 <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-slate-600">
                   {m.mensaje}
                 </p>
