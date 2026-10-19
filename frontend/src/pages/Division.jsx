@@ -176,7 +176,7 @@ export default function Division() {
                 className="flex items-center gap-1.5 rounded-[9px] bg-slate-900 px-[18px] py-2.5 text-[13px] font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
                 <Send size={13} strokeWidth={2.3} />
-                {enviando ? 'Enviando...' : 'Enviar'}
+                {enviando ? 'Publicando...' : 'Publicar'}
               </button>
             </div>
           </form>
