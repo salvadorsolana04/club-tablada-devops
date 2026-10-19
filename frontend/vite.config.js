@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
@@ -8,6 +9,8 @@ export default defineConfig({
     port: 5173,
   },
   test: {
+    // Los specs de Playwright (e2e/) los corre Playwright contra QA, no vitest
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     coverage: {
       provider: 'v8',
       // json-summary deja coverage-summary.json: lo lee el paso del pipeline que arma el Summary
