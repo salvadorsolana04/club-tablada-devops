@@ -72,5 +72,5 @@ class HealthView(APIView):
         return Response({
             'estado': 'ok',
             'noticias': Noticia.objects.count(),
-            'commit': os.environ.get('RENDER_GIT_COMMIT', 'local'),
+            'commit': os.environ.get('GIT_COMMIT', 'local'),
         })

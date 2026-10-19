@@ -35,6 +35,12 @@ COPY --from=build /opt/venv /opt/venv
 COPY . .
 RUN chmod +x entrypoint.sh && python manage.py collectstatic --noinput
 
+# El commit que produjo esta imagen: se lo pasa el pipeline (build-args) y /health lo devuelve,
+# así el smoke comprueba que el entorno ejecuta LA imagen de esta corrida. Va al final: como
+# cambia en cada commit, invalida solo esta capa y no las de arriba.
+ARG GIT_COMMIT=local
+ENV GIT_COMMIT=$GIT_COMMIT
+
 EXPOSE 8000
 
 ENTRYPOINT ["./entrypoint.sh"]
