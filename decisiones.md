@@ -760,3 +760,54 @@ En el backend pasa lo mismo: `DATABASE_URL`, `SECRET_KEY` y `DEBUG` van por vari
 
 ### 12. Declaración de uso de IA (TP7)
 
+Se utilizó **Claude Code** (Anthropic) como herramienta asistente, copiloto técnico y guía de control durante la transición hacia el modelo *build once, deploy many* y la implementación de las suites de prueba de integración y end-to-end:
+
+- **Configuración de tooling y browsers**: asistencia en la instalación y configuración de Playwright (`playwright.config.js`) y en la escritura del script auxiliar (`resumen-playwright.js`) para volcar el resumen de pruebas al Step Summary de GitHub Actions.
+- **Aislamiento de entornos de test**: soporte para configurar la exclusión de la carpeta `e2e/` en `vite.config.js`, evitando colisiones entre Vitest (unitarios del TP5) y los specs de Playwright.
+- **Sintaxis y secuencia en el pipeline**: asistencia en la estructuración de los jobs `integracion` y `e2e` dentro de `.github/workflows/ci.yml`, garantizando el encadenamiento secuencial estricto de dependencias (`deploy-qa` → `integracion` → `e2e` → `deploy-prod`), la parametrización de `imgURL` con el `sha-${{ github.sha }}` exacto para los deploy hooks de Render, y la publicación independiente de artefactos de reporte (`playwright-report-integracion` y `playwright-report-e2e`).
+- **Diseño de specs y fixtures**: consulta de sintaxis para el uso del fixture `request` (sin navegador) en `frontend/e2e/api.spec.js` y métodos de interacción accesible (`getByLabel`, `getByRole`) en `frontend/e2e/division.spec.js`.
+
+**Verificación propia**:
+Toda la lógica de negocio, pruebas, manipulación de infraestructura y validación de fallos fue realizada y comprobada por mí:
+- **Verificación local con Docker Compose**: antes de tocar el pipeline remoto, levanté localmente la app con Docker Compose utilizando un override de puertos (`:18000` para la API y `:13000` para el frontend) para evitar conflictos con servicios previos en mi máquina, y ejecuté las suites completas confirmando las 3 pruebas de integración y los 3 flujos e2e en verde.
+- **Configuración de servicios image-backed**: modifiqué en el panel de Render la fuente de los cuatro servicios (`api-qa`, `front-qa`, `api-prod`, `front-prod`) para pasar de compilación desde repositorio a *Existing Image* apuntando a `ghcr.io`, verificando que los paquetes fueran públicos y que los deploys se activaran exclusivamente vía deploy hook.
+- **Comprobación de identidad e inmutabilidad**: verifiqué comparando el *Source* en la pestaña *Deploys* de Render con los digests publicados en el registry que tanto QA como PROD ejecutaran la misma imagen etiquetada con el commit de 40 caracteres (`sha-<commit>`), sin reconstrucciones intermedias.
+- **Provocación del fallo en la aplicación (par verde/rojo)**: en una rama aislada modifiqué intencionalmente el frontend alterando el texto del botón de publicar (cambiando el contrato visual que busca el test sin tocar la API ni la suite de pruebas). Comprobé en GitHub Actions que el smoke test y el job de integración pasaran en verde, que la suite e2e fallara en rojo frenando la promoción antes de pedir aprobación para `production`, y descargué el reporte con screenshot/traza para diagnosticarlo.
+- **Cierre de release**: tras corregir el frontend y validar la corrida verde completa hasta PROD, identifiqué mediante la API de GitHub el commit exacto desplegado en el environment `production` y creé sobre él la release con el tag `v7.0.0`. Puedo explicar y defender en la instancia oral el diagnóstico del par verde/rojo, la diferencia entre pruebas amplias y estrechas, y la trazabilidad desde la release hasta la imagen en ejecución.
+
+---
+
+## TP8 — Infraestructura como Código: `preprod`, escrito
+
+### 1. Riel y versiones
+
+**Terraform 1.16.6** sobre los mismos proveedores del TP6: **Neon** para la base y **Render** para los servicios. Todo está en `infra/` (`main.tf`, `variables.tf`, `outputs.tf` y el `.terraform.lock.hcl`). Declara un entorno **nuevo**, `preprod`: un proyecto de Neon propio (`club-tablada-preprod`, con su rol y su base) y dos servicios de Render (`club-tablada-api-preprod` y `club-tablada-front-preprod`) que corren la imagen del TP7, `sha-4b48126…`, la de `v7.0.0` y la misma que está en PROD. QA y PROD no están declarados y este código no los toca.
+
+Providers fijados por versión exacta, con los hashes en el lockfile para macOS, Linux y Windows:
+
+| Provider | Versión | Para qué |
+|---|---|---|
+| `kislerdm/neon` | `0.18.0` | Proyecto, rol y base. Su repositorio está archivado y el oficial (`neondatabase/neon`) todavía no salió: si no fijo la versión, un `init` futuro podría bajar otra cosa |
+| `render-oss/render` | `1.9.1` | Los dos servicios, en plan `free`. En ese plan el provider solo puede crear y destruir, no modificar |
+| `hashicorp/random` | `3.7.2` | La `SECRET_KEY` de Django, generada y no escrita en ningún lado |
+
+**Sin credenciales en el HCL**: los providers leen `NEON_API_KEY`, `RENDER_API_KEY` y `RENDER_OWNER_ID` del entorno, que cargo desde un archivo fuera del repo. **El estado vive en mi máquina** (`infra/terraform.tfstate`, sin bloque `backend`) y está ignorado por git desde antes del primer `apply`, junto con `.terraform/`, `*.tfvars` y `*.tfplan`.
+
+**Lo que se deriva y no se copia**:
+- `DATABASE_URL` se arma con el rol, la contraseña, el host y la base que **devolvió Neon** al crearlos (`local.database_url`).
+- `BACKEND_URL` del front es la `url` que Render le asignó a **su** api, con `trimsuffix(…, "/")`.
+
+La prueba de que el front habla con su propia base: a través del front, `/api/v1/health/` devuelve `"noticias":0`, mientras QA y PROD tienen 1.
+
+### 2. Problemas y cómo los resolví
+
+- **Homebrew no instalaba Terraform**: mis *Command Line Tools* de Xcode estaban desactualizadas. Bajé el binario oficial (`terraform_1.16.6_darwin_arm64.zip`) de `releases.hashicorp.com`, verifiqué su SHA256 contra el `SHA256SUMS` que publica HashiCorp y lo dejé en `~/.local/bin`.
+- **La API de Neon contestaba `org_id is required`**: mi cuenta está dentro de una organización, y el proyecto se crea en ella. `org_id` va en `neon_project` como variable con default, porque no es secreto.
+- **El `RENDER_OWNER_ID` de la URL no era el correcto**: la URL del dashboard muestra mi usuario (`usr-…`), pero los servicios viven en el workspace (`tea-…`). Lo saqué de la API de Render (`GET /v1/owners`).
+- **Mi app no es la de la guía**: es Django, que lee `DATABASE_URL` (`postgres://…?sslmode=require`, con la contraseña pasada por `urlencode`) en vez de `ConnectionStrings__Default`, y además necesita `SECRET_KEY`. Copié de QA los nombres de sus variables (no sus valores): `DEBUG=False` y `PORT` en los dos servicios. `GIT_COMMIT` no se declara, porque viene horneado en la imagen y una variable del servicio lo pisaría.
+- **El plan guardado (`-out`) también lleva valores sensibles**: agregué `*.tfplan` al `.gitignore`. Aplico siempre el plan que leí (`terraform apply preprod.tfplan`), no uno nuevo.
+- **Lo que medí y la guía no**: al recrear los servicios con el mismo nombre, Render devolvió **las mismas URLs**, sin sufijo, aunque los IDs son nuevos. Y Neon crea una base `neondb` en cada proyecto nuevo que mi código no declara: el plan no la ve, igual que no vio la `base_intrusa` que creé a mano para probar el drift.
+- **Lo que sigue siendo artesanal**: QA y PROD (clickeados en el TP6), las API keys y los deploy hooks (el provider de Render no los expone), y los usuarios de la app. Preprod nace con la base vacía, sin usuarios: el esquema lo crean las migraciones del `entrypoint.sh` al arrancar, pero para entrar a la app haría falta crear un usuario.
+
+### 3. Declaración de uso de IA (TP8)
+

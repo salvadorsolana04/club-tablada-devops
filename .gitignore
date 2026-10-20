@@ -46,3 +46,11 @@ build/
 Thumbs.db
 .vscode/
 .idea/
+
+# Terraform (infra/): el estado tiene contraseñas en texto plano y vive SÓLO en mi máquina
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+*.tfplan
+crash.log
