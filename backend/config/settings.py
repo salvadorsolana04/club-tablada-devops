@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+import sentry_sdk
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,6 +18,19 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-me-in-production')
 
 DEBUG = env('DEBUG')
+
+# Sentry: qué falla, qué tarda y qué se usa en producción. El DSN llega por el entorno (sólo
+# está cargado en el servicio de PROD): si no está —mi máquina, los tests, QA— no se inicializa
+# y la app anda igual. La release es el commit horneado en la imagen (TP7): cada error queda
+# asociado a la imagen exacta que lo produjo.
+SENTRY_DSN = env('SENTRY_DSN', default='')
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=env('SENTRY_ENVIRONMENT', default='produccion'),
+        release=env('GIT_COMMIT', default='local'),
+        traces_sample_rate=1.0,  # medir todos los pedidos: con el tráfico de la cursada sobra cuota
+    )
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 

@@ -164,6 +164,8 @@ jobs:
 
   deploy-qa:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # sólo dispara hooks y hace curl: no escribe nada en el repo
     needs: [build-backend, build-frontend]     # sin CI verde no hay deploy
     if: github.ref == 'refs/heads/main'        # los PRs verifican; solo main despliega
     environment: qa
@@ -210,6 +212,8 @@ jobs:
   # y más barata, y si la api está rota no vale la pena levantar un browser para confirmarlo.
   integracion:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # baja el código y corre los pedidos a QA
     needs: deploy-qa
     timeout-minutes: 15
     steps:
@@ -251,6 +255,8 @@ jobs:
   # Si la integración falló, no corre: su needs no se cumple.
   e2e:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # baja el código y corre el navegador contra QA
     needs: integracion
     timeout-minutes: 20               # si algo se cuelga, el job muere en vez de esperar horas
     steps:
@@ -293,6 +299,8 @@ jobs:
 
   deploy-prod:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # sólo dispara hooks y hace curl: no escribe nada en el repo
     needs: e2e                        # ← EL gate: sin integración y e2e verdes, ni se pide aprobación
     environment: production           # ⏸ acá el workflow se pausa hasta que alguien apruebe
     concurrency:

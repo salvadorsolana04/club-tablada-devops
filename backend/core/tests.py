@@ -247,3 +247,8 @@ class HealthTests(APITestCase):
         self.assertEqual(response.data['estado'], 'ok')
         self.assertEqual(response.data['noticias'], 0)
         self.assertEqual(response.data['commit'], 'local')
+
+    def test_falla_temporal_del_tp9_lanza_el_error_de_prueba(self):
+        # TEMPORAL (TP9): el endpoint existe para que el error llegue a Sentry; se saca con él.
+        with self.assertRaisesMessage(RuntimeError, 'Falla de prueba del TP9'):
+            self.client.get(reverse('falla'))
