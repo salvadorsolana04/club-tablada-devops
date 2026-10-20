@@ -1,0 +1,19 @@
+# Dependabot lee esto desde main: cada semana revisa estos tres ecosistemas y abre un PR por
+# cada actualización disponible. Cada PR pasa por el mismo pipeline que cualquier cambio (tests,
+# cobertura, build), y recién con todo verde se mergea.
+version: 2
+updates:
+  - package-ecosystem: "pip" # las dependencias del backend (backend/requirements.txt)
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm" # las del frontend (frontend/package.json + package-lock.json)
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions" # las actions del workflow también son dependencias
+    directory: "/"
+    schedule:
+      interval: "weekly"
