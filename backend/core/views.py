@@ -74,13 +74,3 @@ class HealthView(APIView):
             'noticias': Noticia.objects.count(),
             'commit': os.environ.get('GIT_COMMIT', 'local'),
         })
-
-
-class FallaView(APIView):
-    """TEMPORAL (TP9): un error a propósito para verlo llegar a Sentry. Se saca al cerrar el TP."""
-
-    authentication_classes = []
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request):
-        raise RuntimeError('Falla de prueba del TP9')

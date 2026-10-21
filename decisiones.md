@@ -824,3 +824,53 @@ Toda la ejecución, pruebas sobre la infraestructura real, experimentos de ciclo
 - **Idempotencia y auditoría del estado**: ejecuté una segunda pasada de `terraform plan` confirmando el mensaje «No changes», e inspeccioné el archivo local `terraform.tfstate` corroborando la presencia de secretos en texto plano para justificar por qué jamás debe versionarse.
 - **Simulación y detección de drift por API**: provoqué drift mediante llamadas con `curl` directo a la API de Neon eliminando la base (`DELETE`), comprobando que el siguiente `plan` detectara la discrepancia proponiendo su recreación (`1 to add`); a su vez, creé una base intrusa por API (`POST`) constatando que la herramienta solo vigila lo expresamente declarado y no reporta cambios.
 - **Ciclo de vida y destrucción**: ejecuté `terraform destroy` observando en vivo cómo el orden de desmontaje recorre el grafo de dependencias de forma inversa a la creación, verifiqué la eliminación efectiva consultando las APIs de Render y Neon (sin depender de dashboards web) para cuidar la cuota de horas gratuitas del workspace, y recreé el entorno idéntico con un nuevo `apply`. Finalmente, congelé la entrega generando la release con el tag `v8.0.0` sobre el commit que cierra la carpeta `infra/`.
+
+---
+
+## TP9 — DevSecOps + Observabilidad + Continuous Feedback
+
+### 1. El PR de Dependabot que mergeé, y por qué me animé
+
+Prendí en *Settings → Advanced Security* las alertas y las actualizaciones de seguridad de Dependabot, y agregué `.github/dependabot.yml` con los tres ecosistemas de la app: `pip` (`/backend`), `npm` (`/frontend`) y `github-actions` (`/`) ([PR #50](https://github.com/salvadorsolana04/club-tablada-devops/pull/50)). A los minutos del merge había 13 PRs abiertos y 17 alertas.
+
+- **El que mergeé: `django` 6.1 → 6.1.2** ([PR #58](https://github.com/salvadorsolana04/club-tablada-devops/pull/58)). Es un **patch** de la misma línea (6.1.x): según SemVer sólo arregla, no cambia la API. Las notas traen cinco CVE corregidos, y cerró las dos alertas de Django. Me animé porque el verde lo dio **todo el semestre junto**: los unitarios con su umbral de cobertura (TP5), la imagen construida una sola vez y desplegada en QA (TP6/TP7), la integración contra la base de verdad y la e2e con un navegador (TP7), y recién entonces mi aprobación de PROD.
+- **El segundo: `axios` 1.19.0 → 1.20.0** ([PR #62](https://github.com/salvadorsolana04/club-tablada-devops/pull/62)). Es un **minor** y cerró **12 alertas**, 6 de ellas *high*. Como es el cliente HTTP que corre en el navegador, lo validó la e2e de verdad. Estaba `BEHIND` (`main` se había movido y la protección exige estar al día): lo resolví comentando `@dependabot rebase`.
+- **Los que NO mergeé, a propósito**: `tailwindcss` 3 → 4 y `pytest` 8 → 9. Son **majors**: pueden cambiar la configuración o la API aunque el CI salga verde, y piden leer el changelog y probar con cuidado.
+
+**CodeQL** (configuración por defecto) encontró 6 cosas en su primer análisis:
+- **4 reales**: `actions/missing-workflow-permissions` en `deploy-qa`, `integracion`, `e2e` y `deploy-prod`, que corrían con los permisos por defecto del token. Lo arreglé declarando `permissions: contents: read` en cada uno ([PR #69](https://github.com/salvadorsolana04/club-tablada-devops/pull/69)), y se cerraron solas en el análisis siguiente.
+- **2 descartadas con análisis**: `js/xss-through-dom` en el `<img src={fotoPreview}>` de `Feed.jsx` y `Division.jsx`. No es explotable: `fotoPreview` es una URL `blob:` del archivo que eligió el propio usuario (`URL.createObjectURL`), un `<img>` no ejecuta scripts, no pasa por el servidor y no se le muestra a nadie más. Quedaron como *falso positivo* con esa justificación en la alerta.
+
+**Push protection** ya venía activa en mi repositorio público (también secret scanning).
+
+### 2. El monitor, y lo que mostró Sentry
+
+**UptimeRobot** sobre `https://club-tablada-api-prod.onrender.com/api/v1/health/`, cada 5 minutos, con aviso por mail. Mi `/health` contesta `200` a un `HEAD`, que es lo que usa el plan gratis. La caída la provoqué suspendiendo `club-tablada-api-prod` en Render, el 21/10:
+
+| Hora | Qué pasó |
+|---|---|
+| 17:27:09 | PROD empieza a contestar `503` (`x-render-routing: suspend-by-user`) |
+| **17:29:56** | **Mail DOWN** («HTTP 503 – Service Unavailable», desde Ashburn) |
+| 17:33:11 | Después del *Resume*, PROD vuelve a contestar `200`, con la misma imagen (`d772001`) |
+| **17:35:01** | **Mail UP** (desde Ohio): «Duration: 5 minutes and 5 seconds» |
+
+**Tardó ~3 minutos en avisarme de la caída** y ~2 en avisarme de la vuelta. Es lo esperable con un chequeo cada 5 minutos más la confirmación que hace antes de alertar, y por eso midió 5 min 5 s de una caída que duró ~6. Sin el monitor me habría enterado cuando un usuario me escribiera. Al terminar lo **pausé**: le pega a PROD cada 5 minutos, lo mantiene despierto todo el mes y se come las 750 horas gratuitas del workspace.
+
+**Sentry** está en el back (`sentry-sdk[django]`, con el DSN sólo en el servicio de PROD y `release` = el commit horneado en la imagen) y en el front (`@sentry/react`). Después de usar PROD unos minutos:
+
+- **Un error**: `RuntimeError: Falla de prueba del TP9`, del endpoint temporal `/api/v1/falla/` (ya sacado), con la release `d77200148f60` y el entorno `produccion`.
+- **La operación más usada y la más lenta es la misma: el login**, `POST /api/v1/auth/token/`: p50 **2,67 s** · p95 **3,12 s**, y además la de mayor tiempo total. Le siguen `GET /api/v1/noticias/` (p95 783 ms) y `GET /api/v1/divisiones/mensajes/` (p95 584 ms).
+- **Cada consulta a la base tarda 70–78 ms**, aunque sea por clave primaria: la api está en Render Oregon y la base en Neon Virginia. Es la limitación que anoté en el TP6, ahora medida.
+
+De ahí salió la tarjeta [#70 «El login tarda 3,1 s (P95) en PROD»](https://github.com/salvadorsolana04/club-tablada-devops/issues/70) en mi tablero del TP3, con dos hipótesis: el hash de la contraseña en la CPU del plan gratis y la latencia entre regiones.
+
+### 3. Problemas encontrados y cómo los resolví
+
+- **La trampa del *Save, rebuild and deploy* de Render.** El DSN del back va como `SENTRY_DSN` en el servicio de PROD, y guardarlo desde el panel ofrece desplegar. En un servicio *Existing Image* eso despliega la imagen de *Settings*, que sigue siendo la del TP6, y habría llevado PROD para atrás. Cargué la variable por la **API de Render**, que sólo la guarda y no despliega, y la tomó el deploy siguiente del pipeline.
+- **UptimeRobot siguió diciendo *Up* unos minutos después del suspend.** No era el método: probé `GET` y `HEAD` y los dos devolvían `503`. Era el intervalo de 5 minutos más la confirmación antes de alertar.
+- **El DSN de Sentry, verificado antes de desplegar**: levanté la imagen final del back en mi máquina con el DSN, llamé a la falla y vi salir el error y las transacciones (entorno `local-verificacion`, que no se mezcla con producción).
+- **Un endpoint que falla sin bajar la cobertura**: `/api/v1/falla/` entró con su test, así que el umbral del TP5 siguió cumpliéndose, y salió en el PR de cierre junto con el test.
+- **El comentario al descartar una alerta de CodeQL** admite 280 caracteres como máximo: hubo que resumir la justificación.
+
+### 4. Declaración de uso de IA (TP9)
+
