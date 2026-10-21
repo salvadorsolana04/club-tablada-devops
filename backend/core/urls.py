@@ -2,7 +2,6 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .views import (
-    FallaView,
     HealthView,
     MensajeDivisionDestroyView,
     MensajeDivisionListCreateView,
@@ -12,7 +11,6 @@ from .views import (
 
 urlpatterns = [
     path('health/', HealthView.as_view(), name='health'),
-    path('falla/', FallaView.as_view(), name='falla'),  # TEMPORAL (TP9)
     path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('perfil/', PerfilView.as_view(), name='perfil'),
